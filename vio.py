@@ -8,7 +8,7 @@ import requests
 import io
 
 scopes = ['https://www.googleapis.com/auth/drive']
-service_account_file = 'api_keys\\drive.json'
+service_account_file = 'api_keys/drive.json'
 parent_folder_id = "1THhhwZKmJwFgtT6owYaEB7c1K31PANnU"
 
 creds = Credentials.from_service_account_file(service_account_file, scopes=scopes)
