@@ -16,6 +16,7 @@ from google.oauth2.service_account import Credentials
 from pdf import pdf_bp
 import threading
 import os
+import uuid
 
 creds = Credentials.from_service_account_file('api_keys/drive.json')
 app = Flask(__name__)
@@ -23,6 +24,10 @@ CORS(app, supports_credentials=True)
 
 # Register the PDF blueprint
 app.register_blueprint(pdf_bp, url_prefix='/pdf')
+
+# Store the status of each request
+request_status = {}
+lock = threading.Lock()
 
 def prijava(korisnicko_ime, lozinka, stranica):
     chromedriver_path = '/usr/local/bin/chromedriver'
@@ -120,7 +125,11 @@ def index():
         print(lozinka)
         print(stranica)
 
-        def process_request(korisnicko_ime, lozinka, stranica):
+        request_id = str(uuid.uuid4())
+        with lock:
+            request_status[request_id] = 'processing'
+
+        def process_request(request_id, korisnicko_ime, lozinka, stranica):
             try:
                 driver = prijava(korisnicko_ime, lozinka, stranica)
 
@@ -131,7 +140,10 @@ def index():
                 worksheet = spreadsheet.worksheet(stranica)
 
                 if worksheet is None:
-                    return {'result': f'Error: Worksheet "{stranica}" not found or created.'}
+                    print(f'Error: Worksheet "{stranica}" not found or created.')
+                    with lock:
+                        request_status[request_id] = 'error'
+                    return
 
                 if stranica == 'vio':
                     dohvati_podatke_vio(driver, worksheet)
@@ -143,26 +155,26 @@ def index():
                     dohvati_podatke_a1(driver, worksheet)
                         
                 driver.quit()
-                return {'result': f'Podatci uspješno upisani u Google Sheets - Worksheet: {stranica}', 'success': True}
-
+                with lock:
+                    request_status[request_id] = 'completed'
+                print(f'Podatci uspješno upisani u Google Sheets - Worksheet: {stranica}')
             except Exception as e:
-                return {'result': f'Greška pri prikupljanju podataka: {str(e)}', 'success': False}
+                with lock:
+                    request_status[request_id] = 'error'
+                print(f'Greška pri prikupljanju podataka: {str(e)}')
 
-        def handle_request():
-            result = process_request(korisnicko_ime, lozinka, stranica)
-            return result
-
-        thread = threading.Thread(target=handle_request)
+        thread = threading.Thread(target=process_request, args=(request_id, korisnicko_ime, lozinka, stranica))
         thread.start()
-        
-        result = handle_request()
 
-        if result['success']:
-            return jsonify(result), 202
-        else:
-            return jsonify(result), 500
+        return jsonify({'request_id': request_id}), 202
 
     return render_template('index.html')
+
+@app.route('/status/<request_id>', methods=['GET'])
+def get_status(request_id):
+    with lock:
+        status = request_status.get(request_id, 'unknown')
+    return jsonify({'status': status})
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))

@@ -19,7 +19,8 @@ async function submitForm(event) {
 
         if (response.ok) {
             const data = await response.json();
-            document.getElementById('result').innerText = data.result;
+            const requestId = data.request_id;
+            await checkStatus(requestId);
         } else {
             document.getElementById('result').innerText = 'Greška pri prikupljanju podataka.';
         }
@@ -31,6 +32,27 @@ async function submitForm(event) {
         document.querySelector('.loader-background').style.display = 'none';
     }
 }
+
+async function checkStatus(requestId) {
+    let status = 'processing';
+    while (status === 'processing') {
+        const response = await fetch(`https://sheets-scraping.onrender.com/status/${requestId}`);
+        const data = await response.json();
+        status = data.status;
+
+        if (status === 'completed') {
+            document.getElementById('result').innerText = 'Podatci uspješno upisani u Google Sheets.';
+        } else if (status === 'error') {
+            document.getElementById('result').innerText = 'Greška pri prikupljanju podataka.';
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 1000)); // wait for 1 second before next poll
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('loginForm').addEventListener('submit', submitForm);
+});
 
 async function submitMeterForm(event) {
     event.preventDefault();
