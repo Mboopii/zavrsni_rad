@@ -1,11 +1,12 @@
-from datetime import datetime
 import random
+import io
+from datetime import datetime
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
-import io
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
-# Initialize Google Drive API credentials
+#inicijalizacija google drive api vjerodajnica
 scopes = ['https://www.googleapis.com/auth/drive']
 service_account_file = 'api_keys/drive.json'
 parent_folder_id = "17WYhCuwD_HkIkmNWcJJTOvDSc0d577vE"
@@ -13,22 +14,18 @@ parent_folder_id = "17WYhCuwD_HkIkmNWcJJTOvDSc0d577vE"
 creds = Credentials.from_service_account_file(service_account_file, scopes=scopes)
 
 def dohvati_podatke_hep(session, worksheet, kupac_id):
-    # Fetch data from the new endpoint
+    #dohvati podatke s novog krajnjeg točka
     data_url = f'https://mojracun.hep.hr/elektra/api/promet/{kupac_id}'
     response = session.get(data_url)
-
-    print(f"HEP data fetch response: {response.status_code}, {response.content[:200]}...")  # Print the response status and a snippet of the content
 
     try:
         data = response.json()
     except ValueError:
-        print("Failed to parse HEP data.")
-        return 'Failed to parse HEP data.', False
+        return 'Neuspjelo parsiranje HEP podataka.', False
 
     svi_racuni = data.get('promet_lista', [])
-    print(f"Total invoices fetched: {len(svi_racuni)}")  # Print the total number of invoices fetched
 
-    # Add header if the worksheet is empty
+    #dodaj zaglavlje ako je radni list prazan
     if not worksheet.get_all_values():
         header_row = ['Datum računa', 'Vrsta', 'Iznos računa', 'Iznos uplate', 'Link na PDF']
         worksheet.append_row(header_row)
@@ -37,47 +34,61 @@ def dohvati_podatke_hep(session, worksheet, kupac_id):
     if latest_date_sheet:
         latest_date_sheet = datetime.strptime(latest_date_sheet, "%d.%m.%y")
         svi_racuni = [racun for racun in svi_racuni if datetime.strptime(racun['Datum'][:10], "%Y-%m-%d") > latest_date_sheet]
-        print(f"Invoices after filtering by date: {len(svi_racuni)}")  # Print the number of invoices after filtering
 
     data_to_insert = []
+    pdf_tasks = []
     pdf_links = {}
-    for racun in svi_racuni:
-        datum_racuna = racun['Datum'][:10]
-        vrsta = racun['Opis']
-        iznos_racuna = racun.get('Duguje', '') if racun.get('Duguje') != 0 else ''
-        iznos_uplate = racun.get('Potrazuje', '') if racun.get('Potrazuje') != 0 else ''
-        racun_id = racun.get('RacunId')
 
-        if datum_racuna and racun_id:
+    #koristi ThreadPoolExecutor za asinkrono učitavanje PDF-ova
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        for racun in svi_racuni:
+            datum_racuna = racun['Datum'][:10]
+            vrsta = racun['Opis']
+            iznos_racuna = racun.get('Duguje', '') if racun.get('Duguje') != 0 else ''
+            iznos_uplate = racun.get('Potrazuje', '') if racun.get('Potrazuje') != 0 else ''
+            racun_id = racun.get('Racun')
+            
             datum_formatted = datetime.strptime(datum_racuna, "%Y-%m-%d").strftime("%d.%m.%y")
-            pdf_link = fetch_and_upload_pdf(session, kupac_id, racun_id, datum_formatted)
-            data_to_insert.append([datum_formatted, vrsta, iznos_racuna, iznos_uplate, pdf_link])
+            pdf_link = ""
+            if racun_id:
+                pdf_tasks.append(executor.submit(fetch_and_upload_pdf, session, kupac_id, racun_id, datum_formatted))
+            data_to_insert.append([datum_formatted, vrsta, iznos_racuna, iznos_uplate, racun_id])
 
-    # Print the data to be inserted
-    print(f"Data to insert: {data_to_insert}")
+        #čekaj da se svi PDF-ovi učitaju
+        for task in as_completed(pdf_tasks):
+            result = task.result()
+            pdf_links[result['racun_id']] = result['pdf_link']
 
-    # Sort data by date before inserting into Google Sheets
+    #ažuriraj podatke s pravim linkovima na google drive
+    for row in data_to_insert:
+        if row[4] in pdf_links:
+            row[4] = pdf_links[row[4]]
+        else:
+            row[4] = ""  #ako nema PDF linka, postavi prazno polje
+    
+    #sortiraj podatke po datumu prije umetanja u google sheets
     data_to_insert.sort(key=lambda x: datetime.strptime(x[0], "%d.%m.%y"), reverse=True)
 
-    # Insert all data at once
+    #umetni sve podatke odjednom
     if data_to_insert:
         worksheet.insert_rows(data_to_insert, 2, value_input_option='RAW')
-        return 'Data successfully inserted into the worksheet', True
+        return 'Podaci uspješno umetnuti u radni list', True
 
-    return 'No new data to insert', True
+    return 'Nema novih podataka za umetanje', True
 
 def fetch_and_upload_pdf(session, kupac_id, racun_id, datum):
     pdf_url = 'https://mojracun.hep.hr/elektra/api/report/racun'
     payload = {
         'kupacId': kupac_id,
         'racunId': racun_id,
-        'time': random.random()  # Dynamically generate a random float between 0 and 1
+        'time': random.random()  #dinamički generiraj slučajni float između 0 i 1
     }
     headers = {
         'Content-Type': 'application/json'
     }
     response = session.post(pdf_url, json=payload, headers=headers)
 
+    result = {'racun_id': racun_id, 'pdf_link': ""}
     if response.status_code == 200:
         pdf_filename = f"Racun_{datum}.pdf"
         content = io.BytesIO(response.content)
@@ -97,12 +108,7 @@ def fetch_and_upload_pdf(session, kupac_id, racun_id, datum):
                 fields='id, webViewLink'
             ).execute()
 
-            print(f"{datum}, {pdf_filename} - Datoteka uspješno učitana.")
-            return file['webViewLink']  # Return the Google Drive link
+            result['pdf_link'] = file['webViewLink']  #vrati link na google drive
         except Exception as e:
-            print(f"Pogreška prilikom učitavanja datoteke na Google Drive: {e}")
-            return ""  # In case of error, return an empty link
-    else:
-        print(f"Pogreška prilikom preuzimanja PDF-a: {response.status_code}")
-        print(f"URL: {pdf_url}")
-        return ""  # In case of error, return an empty link
+            pass
+    return result
