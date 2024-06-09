@@ -11,7 +11,6 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.chrome.service import Service
 from google.oauth2.service_account import Credentials
 from pdf import pdf_bp
 import threading
@@ -29,19 +28,13 @@ request_status = {}
 request_lock = threading.Lock()
 
 def create_driver():
-    chromedriver_path = '/usr/local/bin/chromedriver'
-    chrome_executable_path = '/usr/bin/google-chrome'
-
+    selenium_url = os.environ.get('SELENIUM_URL', 'http://localhost:4444/wd/hub')
     chrome_options = webdriver.ChromeOptions()
-    chrome_options.binary_location = chrome_executable_path
     chrome_options.add_argument('--headless')
     chrome_options.add_argument('--no-sandbox')
     chrome_options.add_argument('--disable-dev-shm-usage')
-    chrome_options.add_argument('--remote-debugging-port=9222')
     chrome_options.add_argument('--disable-gpu')
-
-    service = Service(executable_path=chromedriver_path)
-    driver = webdriver.Chrome(service=service, options=chrome_options)
+    driver = webdriver.Remote(command_executor=selenium_url, options=chrome_options)
     return driver
 
 def prijava(korisnicko_ime, lozinka, stranica):
@@ -182,4 +175,4 @@ def check_status(request_id):
 
 if __name__ == '__main__':
     from werkzeug.serving import run_simple
-    run_simple('0.0.0.0', int(os.environ.get('PORT', 5000)), app, threaded=True)
+    run_simple('0.0.0.0', int(os.environ.get('PORT', 5000)), app, use_reloader=True, use_debugger=True)
