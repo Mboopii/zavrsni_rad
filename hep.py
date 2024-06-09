@@ -10,7 +10,7 @@ import random
 #inicijalizacija google drive api vjerodajnica
 scopes = ['https://www.googleapis.com/auth/drive']
 service_account_file = 'api_keys/drive.json'
-parent_folder_id = "17WYhCuwD_HkIkmNWcJJTOvDSc0d577vE"
+parent_folder_id = "1THhhwZKmJwFgtT6owYaEB7c1K31PANnU"
 
 creds = Credentials.from_service_account_file(service_account_file, scopes=scopes)
 
@@ -37,7 +37,6 @@ def dohvati_podatke_hep(session, worksheet, kupac_id):
         svi_racuni = [racun for racun in svi_racuni if datetime.strptime(racun['Datum'][:10], "%Y-%m-%d") > latest_date_sheet]
 
     data_to_insert = []
-    pdf_upload_threads = []
     pdf_links = {}
     for racun in svi_racuni:
         datum_racuna = racun['Datum'][:10]
@@ -50,31 +49,25 @@ def dohvati_podatke_hep(session, worksheet, kupac_id):
             datum_formatted = datetime.strptime(datum_racuna, "%Y-%m-%d").strftime("%Y_%m_%d")
             pdf_link = ""
             if vrsta == 'Račun' and racun_id:
-                thread = threading.Thread(target=upload_pdf_to_drive, args=(session, kupac_id, racun_id, datum_formatted, pdf_links))
-                pdf_upload_threads.append(thread)
-                thread.start()
+                pdf_link = fetch_and_upload_pdf(session, kupac_id, racun_id, datum_formatted, pdf_links)
             data_to_insert.append([datetime.strptime(datum_racuna, "%Y-%m-%d").strftime("%d.%m.%y"), vrsta, iznos_racuna, iznos_uplate, pdf_link])
 
-    #čekaj da se svi PDF-ovi učitaju
-    for thread in pdf_upload_threads:
-        thread.join()
-
-    #ažuriraj podatke s pravim linkovima na google drive
+    # Update the data with actual Google Drive links
     for row in data_to_insert:
         if row[4] in pdf_links:
             row[4] = pdf_links[row[4]]
 
-    #sortiraj podatke po datumu
+    # Sortiraj podatke po datumu
     data_to_insert.sort(key=lambda x: datetime.strptime(x[0], "%d.%m.%y"), reverse=True)
 
-    #umetni sve podatke odjednom
+    # Umetni sve podatke odjednom
     if data_to_insert:
         worksheet.insert_rows(data_to_insert, 2, value_input_option='RAW')
         return 'Data successfully inserted into the worksheet', True
 
     return 'No new data to insert', True
 
-def upload_pdf_to_drive(session, kupac_id, racun_id, datum, pdf_links):
+def fetch_and_upload_pdf(session, kupac_id, racun_id, datum, pdf_links):
     pdf_url = 'https://mojracun.hep.hr/elektra/api/report/racun'
     payload = {
         'kupacId': kupac_id,
@@ -106,7 +99,10 @@ def upload_pdf_to_drive(session, kupac_id, racun_id, datum, pdf_links):
             ).execute()
 
             pdf_links[pdf_url] = file['webViewLink']  #mapiraj izvorni URL na google drive link
+            return file['webViewLink']
         except Exception as e:
             pdf_links[pdf_url] = ""  #u slučaju greške, vrati prazan link
+            return ""
     else:
         pdf_links[pdf_url] = ""  #u slučaju greške, vrati prazan link
+        return ""
