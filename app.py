@@ -17,6 +17,10 @@ from pdf import pdf_bp
 import threading
 import os
 import uuid
+import logging
+
+# Initialize logging
+logging.basicConfig(level=logging.DEBUG)
 
 creds = Credentials.from_service_account_file('api_keys/drive.json')
 app = Flask(__name__)
@@ -110,7 +114,7 @@ def create_worksheets(spreadsheet):
     for ws_name in ["hep", "vio", "gpz", "a1"]:
         if ws_name not in [ws.title for ws in spreadsheet.worksheets()]:
             spreadsheet.add_worksheet(title=ws_name, rows="100", cols="100")
-            print(f"Worksheet '{ws_name}' izrađen.")
+            logging.debug(f"Worksheet '{ws_name}' created.")
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
@@ -121,9 +125,7 @@ def index():
         lozinka = data.get('password')
         stranica = data.get('selectedPage')
 
-        print(korisnicko_ime)
-        print(lozinka)
-        print(stranica)
+        logging.debug(f"Received request with username: {korisnicko_ime}, password: {lozinka}, page: {stranica}")
 
         request_id = str(uuid.uuid4())
         with lock:
@@ -140,7 +142,7 @@ def index():
                 worksheet = spreadsheet.worksheet(stranica)
 
                 if worksheet is None:
-                    print(f'Error: Worksheet "{stranica}" not found or created.')
+                    logging.error(f'Error: Worksheet "{stranica}" not found or created.')
                     with lock:
                         request_status[request_id] = 'error'
                     return
@@ -157,11 +159,11 @@ def index():
                 driver.quit()
                 with lock:
                     request_status[request_id] = 'completed'
-                print(f'Podatci uspješno upisani u Google Sheets - Worksheet: {stranica}')
+                logging.debug(f'Data successfully written to Google Sheets - Worksheet: {stranica}')
             except Exception as e:
                 with lock:
                     request_status[request_id] = 'error'
-                print(f'Greška pri prikupljanju podataka: {str(e)}')
+                logging.error(f'Error during data collection: {str(e)}')
 
         thread = threading.Thread(target=process_request, args=(request_id, korisnicko_ime, lozinka, stranica))
         thread.start()
