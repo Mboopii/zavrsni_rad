@@ -25,6 +25,7 @@ async function submitForm(event) {
         }
     } catch (error) {
         console.error("Greška: ", error);
+        document.getElementById('result').innerText = 'Greška pri prikupljanju podataka.';
     } finally {
         document.getElementById('loader').style.display = 'none';
         document.querySelector('.loader-background').style.display = 'none';
@@ -54,6 +55,7 @@ async function submitMeterForm(event) {
         }
     } catch (error) {
         console.error("Greška: ", error);
+        document.getElementById('meter-result').innerText = 'Greška pri slanju očitanja brojila.';
     } finally {
         document.getElementById('loader').style.display = 'none';
         document.querySelector('.loader-background').style.display = 'none';
