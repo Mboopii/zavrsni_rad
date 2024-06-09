@@ -9,7 +9,7 @@ async function submitForm(event) {
     document.querySelector('.loader-background').style.display = 'block';
 
     try {
-        const response = await fetch('http://localhost:5000/', {
+        const response = await fetch('https://sheets-scraping.onrender.com/', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -41,7 +41,7 @@ async function submitMeterForm(event) {
     document.querySelector('.loader-background').style.display = 'block';
 
     try {
-        const response = await fetch('http://localhost:5000/submit-meter-reading', {
+        const response = await fetch('https://sheets-scraping.onrender.com/submit-meter-reading', {
             method: 'POST',
             body: formData,
         });
@@ -73,7 +73,7 @@ async function submitPdfForm(event) {
     document.querySelector('.loader-background').style.display = 'block';
 
     try {
-        const response = await fetch('http://localhost:5000/pdf/upload-invoice', {
+        const response = await fetch('https://sheets-scraping.onrender.com/pdf/upload-invoice', {
             method: 'POST',
             body: formData,
         });
