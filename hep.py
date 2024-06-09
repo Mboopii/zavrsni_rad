@@ -15,14 +15,14 @@ parent_folder_id = "17WYhCuwD_HkIkmNWcJJTOvDSc0d577vE"
 creds = Credentials.from_service_account_file(service_account_file, scopes=scopes)
 
 def dohvati_podatke_hep(session, worksheet, kupac_id):
-    #dohvati podatke s novog krajnjeg točka
+    #dohvati podatke s novog endpointa
     data_url = f'https://mojracun.hep.hr/elektra/api/promet/{kupac_id}'
     response = session.get(data_url)
 
     try:
         data = response.json()
     except ValueError:
-        return 'Neuspjelo parsiranje HEP podataka.', False
+        return 'Failed to parse HEP data.', False
 
     svi_racuni = data.get('promet_lista', [])
 
@@ -47,13 +47,13 @@ def dohvati_podatke_hep(session, worksheet, kupac_id):
         racun_id = racun.get('Racun')
 
         if datum_racuna:
-            datum_formatted = datetime.strptime(datum_racuna, "%Y-%m-%d").strftime("%d.%m.%y")
+            datum_formatted = datetime.strptime(datum_racuna, "%Y-%m-%d").strftime("%Y_%m_%d")
             pdf_link = ""
-            if racun_id:
+            if vrsta == 'Račun' and racun_id:
                 thread = threading.Thread(target=upload_pdf_to_drive, args=(session, kupac_id, racun_id, datum_formatted, pdf_links))
                 pdf_upload_threads.append(thread)
                 thread.start()
-            data_to_insert.append([datum_formatted, vrsta, iznos_racuna, iznos_uplate, racun_id])
+            data_to_insert.append([datetime.strptime(datum_racuna, "%Y-%m-%d").strftime("%d.%m.%y"), vrsta, iznos_racuna, iznos_uplate, pdf_link])
 
     #čekaj da se svi PDF-ovi učitaju
     for thread in pdf_upload_threads:
@@ -63,25 +63,23 @@ def dohvati_podatke_hep(session, worksheet, kupac_id):
     for row in data_to_insert:
         if row[4] in pdf_links:
             row[4] = pdf_links[row[4]]
-        else:
-            row[4] = ""  #ako nema PDF linka, postavi prazno polje
-    
-    #sortiraj podatke po datumu prije umetanja u google sheets
+
+    #sortiraj podatke po datumu
     data_to_insert.sort(key=lambda x: datetime.strptime(x[0], "%d.%m.%y"), reverse=True)
 
     #umetni sve podatke odjednom
     if data_to_insert:
         worksheet.insert_rows(data_to_insert, 2, value_input_option='RAW')
-        return 'Podaci uspješno umetnuti u radni list', True
+        return 'Data successfully inserted into the worksheet', True
 
-    return 'Nema novih podataka za umetanje', True
+    return 'No new data to insert', True
 
 def upload_pdf_to_drive(session, kupac_id, racun_id, datum, pdf_links):
     pdf_url = 'https://mojracun.hep.hr/elektra/api/report/racun'
     payload = {
         'kupacId': kupac_id,
         'racunId': racun_id,
-        'time': random.random()  #dinamički generiraj slučajni float između 0 i 1
+        'time': random.random()  #dinamički generira random float između 0 i 1
     }
     headers = {
         'Content-Type': 'application/json'
@@ -107,8 +105,8 @@ def upload_pdf_to_drive(session, kupac_id, racun_id, datum, pdf_links):
                 fields='id, webViewLink'
             ).execute()
 
-            pdf_links[racun_id] = file['webViewLink']  #mapiraj racun_id na google drive link
+            pdf_links[pdf_url] = file['webViewLink']  #mapiraj izvorni URL na google drive link
         except Exception as e:
-            pdf_links[racun_id] = ""  #u slučaju greške, vrati prazan link
+            pdf_links[pdf_url] = ""  #u slučaju greške, vrati prazan link
     else:
-        pdf_links[racun_id] = ""  #u slučaju greške, vrati prazan link
+        pdf_links[pdf_url] = ""  #u slučaju greške, vrati prazan link
