@@ -1,5 +1,5 @@
 import gspread
-import requests
+import time
 from flask import Flask, render_template, request, jsonify
 from flask_cors import CORS
 from hep import dohvati_podatke_hep
@@ -11,11 +11,12 @@ from pdf import pdf_bp
 import threading
 import os
 import uuid
+import requests
 from bs4 import BeautifulSoup
 
 creds = Credentials.from_service_account_file('api_keys/drive.json')
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}})
+CORS(app, supports_credentials=True)
 
 # Register the PDF blueprint
 app.register_blueprint(pdf_bp, url_prefix='/pdf')
@@ -23,26 +24,34 @@ app.register_blueprint(pdf_bp, url_prefix='/pdf')
 request_status = {}
 request_lock = threading.Lock()
 
-def create_worksheets(spreadsheet):
-    for ws_name in ["hep", "vio", "gpz", "a1"]:
-        if ws_name not in [ws.title for ws in spreadsheet.worksheets()]:
-            spreadsheet.add_worksheet(title=ws_name, rows="100", cols="100")
-            print(f"Worksheet '{ws_name}' izrađen.")
-
 def prijava(korisnicko_ime, lozinka, stranica):
     session = requests.Session()
 
     if stranica == 'hep':
         login_url = 'https://mojracun.hep.hr/elektra/api/korisnik/prijava'
         login_payload = {
-            'email': korisnicko_ime,
-            'password': lozinka
+            'username': korisnicko_ime,
+            'password': lozinka,
+            'prva': True
         }
-        session.post(login_url, json=login_payload)
+        headers = {
+            'Content-Type': 'application/json'
+        }
+        response = session.post(login_url, json=login_payload, headers=headers)
+        print(f"HEP login response: {response.status_code}, {response.content}")
+        if response.status_code != 200:
+            print(f"HEP login failed: {response.status_code}")
+            return None
+        
+        auth_token = response.json().get('Token')
+        kupac_id = response.json()['Korisnik']['Kupci'][0]['KupacId']
+        if auth_token:
+            session.headers.update({'Authorization': f'Bearer {auth_token}'})
+        else:
+            print("HEP login failed: No auth token found")
+            return None
 
-        data_url = 'https://mojracun.hep.hr/elektra/api/promet'
-        data_response = session.get(data_url)
-        return data_response.json()
+        return session, kupac_id
 
     elif stranica == 'vio':
         login_url = 'https://www.vio.hr/mojvio/?a=login'
@@ -50,52 +59,64 @@ def prijava(korisnicko_ime, lozinka, stranica):
             'email': korisnicko_ime,
             'pass': lozinka
         }
-        session.post(login_url, data=login_payload)
+        response = session.post(login_url, data=login_payload)
+        print(f"VIO login response: {response.status_code}, {response.content}")
+        if response.status_code != 200:
+            print(f"VIO login failed: {response.status_code}")
+            return None
 
-        data_url = 'https://www.vio.hr/mojvio/?v=uplate'
-        data_response = session.get(data_url)
-        return data_response.json()
+        return session
 
     elif stranica == 'gpz':
         login_url = 'https://mojracun.gpz-opskrba.hr/login.aspx'
-        response = session.get(login_url)
-        soup = BeautifulSoup(response.content, 'html.parser')
-
-        viewstate = soup.find('input', {'name': '__VIEWSTATE'})['value']
-        viewstategenerator = soup.find('input', {'name': '__VIEWSTATEGENERATOR'})['value']
-        eventvalidation = soup.find('input', {'name': '__EVENTVALIDATION'})['value']
-
         login_payload = {
+            'IsItLogin': 'yes',
             'email': korisnicko_ime,
-            'password': lozinka,
-            '__VIEWSTATE': viewstate,
-            '__VIEWSTATEGENERATOR': viewstategenerator,
-            '__EVENTVALIDATION': eventvalidation
+            'password': lozinka
         }
-
-        session.post(login_url, data=login_payload)
-
-        data_url = 'https://mojracun.gpz-opskrba.hr/promet.aspx'
-        data_response = session.get(data_url)
-        return data_response.json()
+        response = session.post(login_url, data=login_payload, allow_redirects=False)
+        print(f"GPZ login response: {response.status_code}, {response.content}")
+        if response.status_code != 302:
+            print(f"GPZ login failed: {response.status_code}")
+            return None
+        
+        return session
 
     elif stranica == 'a1':
-        login_url = 'https://moj.a1.hr/prijava'
+        login_url = 'https://webauth.a1.hr/vasmpauth/ProcessLoginServlet'
         login_payload = {
-            'fm_login_user': korisnicko_ime,
-            'fm_login_pass': lozinka
+            'UserID': korisnicko_ime,
+            'Password': lozinka,
+            'userRequestURL': 'https://moj.a1.hr',
+            'serviceRegistrationURL': '',
+            'level': 30,
+            'SetMsisdn': True,
+            'service': '',
+            'hashpassword': 123
         }
+        response = session.post(login_url, data=login_payload, allow_redirects=False)
+        print(f"A1 login response: {response.status_code}, {response.content}")
+        if response.status_code != 302:
+            print(f"A1 login failed: {response.status_code}")
+            return None
 
-        login_submit_url = 'https://webauth.a1.hr/vasmpauth/ProcessLoginServlet'
-        session.post(login_submit_url, data=login_payload)
+        return session
 
-        data_url = 'https://moj.a1.hr/postpaid/residential/pregled-racuna'
-        data_response = session.get(data_url)
-        return data_response.json()
+def create_worksheets(spreadsheet):
+    for ws_name in ["hep", "vio", "gpz", "a1"]:
+        if ws_name not in [ws.title for ws in spreadsheet.worksheets()]:
+            spreadsheet.add_worksheet(title=ws_name, rows="100", cols="100")
+            print(f"Worksheet '{ws_name}' izrađen.")
 
 def process_request(korisnicko_ime, lozinka, stranica, request_id):
     try:
-        data = prijava(korisnicko_ime, lozinka, stranica)
+        session_data = prijava(korisnicko_ime, lozinka, stranica)
+        if session_data is None:
+            update_status(request_id, 'Error: Login failed.', False)
+            return
+
+        session = session_data if stranica != 'hep' else session_data[0]
+        kupac_id = session_data[1] if stranica == 'hep' else None
 
         gc = gspread.service_account(filename='api_keys/racuni.json')
         spreadsheet = gc.open("Računi")
@@ -108,18 +129,18 @@ def process_request(korisnicko_ime, lozinka, stranica, request_id):
             return
 
         if stranica == 'vio':
-            dohvati_podatke_vio(data, worksheet)
+            dohvati_podatke_vio(session, worksheet)
         elif stranica == 'hep':
-            dohvati_podatke_hep(data, worksheet)
+            dohvati_podatke_hep(session, worksheet, kupac_id)
         elif stranica == 'gpz':
-            dohvati_podatke_gpz(data, worksheet)
+            dohvati_podatke_gpz(session, worksheet)
         elif stranica == 'a1':
-            dohvati_podatke_a1(data, worksheet)
-                
-        update_status(request_id, 'Podatci uspješno upisani u Google Sheets - Worksheet: {}'.format(stranica), True)
+            dohvati_podatke_a1(session, worksheet)
+
+        update_status(request_id, 'Data successfully written to Google Sheets - Worksheet: {}'.format(stranica), True)
 
     except Exception as e:
-        update_status(request_id, 'Greška pri prikupljanju podataka: {}'.format(str(e)), False)
+        update_status(request_id, 'Error collecting data: {}'.format(str(e)), False)
 
 def update_status(request_id, message, success):
     with request_lock:
@@ -158,4 +179,4 @@ def check_status(request_id):
         return jsonify({'status': 'unknown'}), 404
 
 if __name__ == '__main__':
-    pass
+    app.run(debug=True, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))

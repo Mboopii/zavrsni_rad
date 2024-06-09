@@ -13,14 +13,15 @@ parent_folder_id = "1THhhwZKmJwFgtT6owYaEB7c1K31PANnU"
 
 creds = Credentials.from_service_account_file(service_account_file, scopes=scopes)
 
-def dohvati_podatke_vio(driver, worksheet):
-    #dohvati HTML
-    soup = BeautifulSoup(driver.page_source, 'html.parser')
+def dohvati_podatke_vio(session, worksheet):
+    # Fetch HTML from the session
+    response = session.get('https://www.vio.hr/mojvio/?v=uplate')
+    soup = BeautifulSoup(response.content, 'html.parser')
 
-    #dohvati sve <tr> elemente koji sadrže podatke o računu
+    # Fetch all <tr> elements containing invoice data
     svi_racuni = soup.find_all('tr')
 
-    #svaki red rasporedi po tipu računa/uplate (Racun, Uplata)
+    # Filter rows based on the presence of 'Racun' or 'Uplata' in the text
     svi_racuni = [racun for racun in svi_racuni if 'Racun' in racun.get_text() or 'Uplata' in racun.get_text()]
 
     # Add header if the worksheet is empty

@@ -14,16 +14,11 @@ parent_folder_id = "1IF4YRCjxJULLJk_lQz_TbMEjwMLrzQXZ"  # Update this with your 
 
 creds = Credentials.from_service_account_file(service_account_file, scopes=scopes)
 
-def dohvati_podatke_a1(driver, worksheet):
-    # Create a session to maintain cookies
-    session = requests.Session()
-
-    # Extract cookies from the driver and add them to the session
-    for cookie in driver.get_cookies():
-        session.cookies.set(cookie['name'], cookie['value'], domain=cookie['domain'])
-
-    # Fetch HTML from webdriver
-    soup = BeautifulSoup(driver.page_source, 'html.parser')
+def dohvati_podatke_a1(session, worksheet):
+    # Fetch HTML from the session
+    data_url = 'https://moj.a1.hr/postpaid/residential/pregled-racuna'
+    response = session.get(data_url)
+    soup = BeautifulSoup(response.content, 'html.parser')
 
     # Fetch all elements containing visible invoice data
     svi_racuni = soup.find_all('div', class_='mv-Payment g-12 g-reset g-rwd p')
@@ -85,10 +80,8 @@ def extract_racun_data(racun):
     if period_element:
         month_year = period_element.find('div', class_='u-fontStrong u-textCenter').get_text(strip=True)
         datum = f"{month_year}"  # Assume the first day of the billing period month
-        month, year = month_year.split('/')
     else:
         datum = ""
-        year, month = "", ""
     
     vrsta = 'Račun'
     
@@ -99,16 +92,22 @@ def extract_racun_data(racun):
         iznos_racuna = ""
     
     due_element = racun.find('div', class_='mv-Payment-due mv-Payment-infoCell mv-Payment-infoCell g-4')
+    if due_element is None:
+        due_element = racun.find('div', class_='mv-Payment-due mv-Payment-infoCell mv-Payment-infoCell g-4 is-late')
     if due_element:
-        datum_dospijeca = due_element.find('div', class_='u-fontStrong u-textCenter').get_text(strip=True)
+        due_text_element = due_element.find('div', class_='u-fontStrong u-textCenter')
+        if due_text_element:
+            datum_dospijeca = due_text_element.get_text(strip=True)
+        else:
+            datum_dospijeca = ""
     else:
         datum_dospijeca = ""
 
     # Construct the PDF link
-    if year and month:
-        pdf_link = f"https://moj.a1.hr/postpaid/residential/pregled-racuna?p_p_id=monthlycost_WAR_moja1postpaidportlets&p_p_lifecycle=2&p_p_state=normal&p_p_mode=view&p_p_resource_id=getPdfDocument&p_p_cacheability=cacheLevelPage&_monthlycost_WAR_moja1postpaidportlets_date={year}-{month}"
-    else:
-        pdf_link = ""
+    pdf_link = ""
+    pdf_element = racun.find('a', class_='bill_pdf_export')
+    if pdf_element and pdf_element.has_attr('href'):
+        pdf_link = f"https://moj.a1.hr{pdf_element['href']}"
 
     return datum, vrsta, iznos_racuna, datum_dospijeca, pdf_link
 

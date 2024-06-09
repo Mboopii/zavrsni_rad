@@ -1,9 +1,14 @@
 from datetime import datetime
 from bs4 import BeautifulSoup
+import requests
 
-def dohvati_podatke_gpz(driver, worksheet):
-    soup = BeautifulSoup(driver.page_source, 'html.parser')
+def dohvati_podatke_gpz(session, worksheet):
+    # Fetch HTML from the session
+    data_url = 'https://mojracun.gpz-opskrba.hr/promet.aspx'
+    response = session.get(data_url)
+    soup = BeautifulSoup(response.content, 'html.parser')
 
+    # Fetch all <tr> elements containing invoice data
     svi_racuni = soup.find_all('tr')
     svi_racuni = [racun for racun in svi_racuni if 'FAKTURA' in racun.get_text() or 'UPLATA' in racun.get_text()]
 
@@ -13,6 +18,7 @@ def dohvati_podatke_gpz(driver, worksheet):
 
     svi_racuni.sort(key=get_date, reverse=True)
 
+    # Add header if the worksheet is empty
     if not worksheet.get_all_values():
         header_row = ['Datum', 'Vrsta', 'Iznos računa', 'Iznos uplate']
         worksheet.append_row(header_row)
