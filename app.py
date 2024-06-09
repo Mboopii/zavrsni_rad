@@ -17,6 +17,10 @@ from pdf import pdf_bp
 import threading
 import os
 import uuid
+import logging
+
+# Setup logging
+logging.basicConfig(level=logging.DEBUG)
 
 creds = Credentials.from_service_account_file('api_keys/drive.json')
 app = Flask(__name__)
@@ -43,67 +47,72 @@ def prijava(korisnicko_ime, lozinka, stranica):
     service = Service(executable_path=chromedriver_path)
     driver = webdriver.Chrome(service=service, options=chrome_options)
     
-    if stranica == 'hep':
-        login_url = 'https://mojracun.hep.hr/elektra/index.html#!/login'
-        driver.get(login_url)
+    try:
+        if stranica == 'hep':
+            login_url = 'https://mojracun.hep.hr/elektra/index.html#!/login'
+            driver.get(login_url)
 
-        username_field = driver.find_element('id', 'email')
-        password_field = driver.find_element('id', 'inPwd')
-        
-        username_field.send_keys(korisnicko_ime)
-        password_field.send_keys(lozinka)
+            username_field = driver.find_element('id', 'email')
+            password_field = driver.find_element('id', 'inPwd')
+            
+            username_field.send_keys(korisnicko_ime)
+            password_field.send_keys(lozinka)
 
-        uvjeti_checkbox = WebDriverWait(driver, 10).until(
-            EC.element_to_be_clickable((By.CSS_SELECTOR, '[ng-model="uvjetiKoristenja"]'))
-        )
-        uvjeti_checkbox.click()
+            uvjeti_checkbox = WebDriverWait(driver, 10).until(
+                EC.element_to_be_clickable((By.CSS_SELECTOR, '[ng-model="uvjetiKoristenja"]'))
+            )
+            uvjeti_checkbox.click()
 
-        password_field.send_keys(Keys.RETURN)
+            password_field.send_keys(Keys.RETURN)
 
-        time.sleep(3)
-        
-    elif stranica == 'vio':
-        login_url = 'https://www.vio.hr/mojvio/'
-        driver.get(login_url)
-        
-        username_field = driver.find_element('id', 'email')
-        password_field = driver.find_element('id', 'pass')
-        
-        username_field.send_keys(korisnicko_ime)
-        password_field.send_keys(lozinka)
-        
-        password_field.send_keys(Keys.RETURN)
-        
-        driver.get('https://www.vio.hr/mojvio/?v=uplate')
-        time.sleep(1)
-        
-    elif stranica == 'gpz':
-        login_url = 'https://mojracun.gpz-opskrba.hr/login.aspx'
-        driver.get(login_url)
-        
-        username_field = driver.find_element('id', 'email')
-        password_field = driver.find_element('id', 'password')
-        
-        username_field.send_keys(korisnicko_ime)
-        password_field.send_keys(lozinka)
-        
-        password_field.send_keys(Keys.RETURN)
-        
-    elif stranica == 'a1':
-        login_url = 'https://moj.a1.hr/prijava'
-        driver.get(login_url)
+            time.sleep(3)
+            
+        elif stranica == 'vio':
+            login_url = 'https://www.vio.hr/mojvio/'
+            driver.get(login_url)
+            
+            username_field = driver.find_element('id', 'email')
+            password_field = driver.find_element('id', 'pass')
+            
+            username_field.send_keys(korisnicko_ime)
+            password_field.send_keys(lozinka)
+            
+            password_field.send_keys(Keys.RETURN)
+            
+            driver.get('https://www.vio.hr/mojvio/?v=uplate')
+            time.sleep(1)
+            
+        elif stranica == 'gpz':
+            login_url = 'https://mojracun.gpz-opskrba.hr/login.aspx'
+            driver.get(login_url)
+            
+            username_field = driver.find_element('id', 'email')
+            password_field = driver.find_element('id', 'password')
+            
+            username_field.send_keys(korisnicko_ime)
+            password_field.send_keys(lozinka)
+            
+            password_field.send_keys(Keys.RETURN)
+            
+        elif stranica == 'a1':
+            login_url = 'https://moj.a1.hr/prijava'
+            driver.get(login_url)
 
-        username_field = driver.find_element(By.ID, 'fm_login_user')
-        password_field = driver.find_element(By.ID, 'fm_login_pass')
-        login_button = driver.find_element(By.CSS_SELECTOR, 'button.btn.btn-primary')
+            username_field = driver.find_element(By.ID, 'fm_login_user')
+            password_field = driver.find_element(By.ID, 'fm_login_pass')
+            login_button = driver.find_element(By.CSS_SELECTOR, 'button.btn.btn-primary')
 
-        username_field.send_keys(korisnicko_ime)
-        password_field.send_keys(lozinka)
-        login_button.click()
+            username_field.send_keys(korisnicko_ime)
+            password_field.send_keys(lozinka)
+            login_button.click()
 
-        driver.get('https://moj.a1.hr/postpaid/residential/pregled-racuna')
+            driver.get('https://moj.a1.hr/postpaid/residential/pregled-racuna')
 
-    return driver
+        return driver
+
+    except Exception as e:
+        driver.quit()
+        raise e
 
 def create_worksheets(spreadsheet):
     for ws_name in ["hep", "vio", "gpz", "a1"]:
@@ -138,6 +147,7 @@ def process_request(korisnicko_ime, lozinka, stranica, request_id):
         update_status(request_id, 'Podatci uspješno upisani u Google Sheets - Worksheet: {}'.format(stranica), True)
 
     except Exception as e:
+        logging.error(f"Error during data collection: {str(e)}")
         update_status(request_id, 'Greška pri prikupljanju podataka: {}'.format(str(e)), False)
 
 def update_status(request_id, message, success):
