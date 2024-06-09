@@ -59,4 +59,4 @@ COPY api_keys /app/api_keys
 RUN pip install -r requirements.txt
 
 # Run the application
-CMD ["gunicorn", "-b", "0.0.0.0:5000", "app:app", "--workers=2", "--threads=2"]
+CMD ["gunicorn", "-b", "0.0.0.0:5000", "app:app", "--workers=4", "--threads=4"]
