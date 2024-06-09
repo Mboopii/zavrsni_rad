@@ -9,7 +9,7 @@ async function submitForm(event) {
     document.querySelector('.loader-background').style.display = 'block';
 
     try {
-        const response = await fetch('https://rad-hom7.onrender.com/', {
+        const response = await fetch('https://web-scraping-8s0w.onrender.com/', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -23,7 +23,7 @@ async function submitForm(event) {
             document.getElementById('result').innerText = data.result;
 
             const statusInterval = setInterval(async () => {
-                const statusResponse = await fetch(`https://rad-hom7.onrender.com/status/${requestId}`);
+                const statusResponse = await fetch(`https://web-scraping-8s0w.onrender.com/status/${requestId}`);
                 if (statusResponse.ok) {
                     const statusData = await statusResponse.json();
                     if (statusData.success !== null) {
@@ -50,7 +50,7 @@ async function submitForm(event) {
 async function checkStatus(requestId) {
     let status = 'processing';
     while (status === 'processing') {
-        const response = await fetch(`https://rad-hom7.onrender.com/status/${requestId}`);
+        const response = await fetch(`https://web-scraping-8s0w.onrender.com/status/${requestId}`);
         const data = await response.json();
         status = data.status;
 
@@ -78,7 +78,7 @@ async function submitMeterForm(event) {
     document.querySelector('.loader-background').style.display = 'block';
 
     try {
-        const response = await fetch('https://rad-hom7.onrender.com/submit-meter-reading', {
+        const response = await fetch('https://web-scraping-8s0w.onrender.com/submit-meter-reading', {
             method: 'POST',
             body: formData,
         });
@@ -111,7 +111,7 @@ async function submitPdfForm(event) {
     document.querySelector('.loader-background').style.display = 'block';
 
     try {
-        const response = await fetch('https://rad-hom7.onrender.com/pdf/upload-invoice', {
+        const response = await fetch('https://web-scraping-8s0w.onrender.com/pdf/upload-invoice', {
             method: 'POST',
             body: formData,
         });
