@@ -180,4 +180,4 @@ def check_status(request_id):
         return jsonify({'status': 'unknown'}), 404
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=False)
