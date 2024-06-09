@@ -20,14 +20,28 @@ async function submitForm(event) {
         if (response.ok) {
             const data = await response.json();
             const requestId = data.request_id;
-            await checkStatus(requestId);
+            document.getElementById('result').innerText = data.result;
+
+            const statusInterval = setInterval(async () => {
+                const statusResponse = await fetch(`https://sheets-scraping.onrender.com/status/${requestId}`);
+                if (statusResponse.ok) {
+                    const statusData = await statusResponse.json();
+                    if (statusData.success !== null) {
+                        clearInterval(statusInterval);
+                        document.getElementById('result').innerText = statusData.result;
+                        document.getElementById('loader').style.display = 'none';
+                        document.querySelector('.loader-background').style.display = 'none';
+                    }
+                }
+            }, 2000); // Check status every 2 seconds
         } else {
             document.getElementById('result').innerText = 'Greška pri prikupljanju podataka.';
+            document.getElementById('loader').style.display = 'none';
+            document.querySelector('.loader-background').style.display = 'none';
         }
     } catch (error) {
         console.error("Greška: ", error);
-        document.getElementById('result').innerText = 'Greška pri prikupljanju podataka.';
-    } finally {
+        document.getElementById('result').innerText = 'Došlo je do greške prilikom slanja zahtjeva.';
         document.getElementById('loader').style.display = 'none';
         document.querySelector('.loader-background').style.display = 'none';
     }

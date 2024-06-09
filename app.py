@@ -17,10 +17,6 @@ from pdf import pdf_bp
 import threading
 import os
 import uuid
-import logging
-
-# Initialize logging
-logging.basicConfig(level=logging.DEBUG)
 
 creds = Credentials.from_service_account_file('api_keys/drive.json')
 app = Flask(__name__)
@@ -29,9 +25,8 @@ CORS(app, supports_credentials=True)
 # Register the PDF blueprint
 app.register_blueprint(pdf_bp, url_prefix='/pdf')
 
-# Store the status of each request
 request_status = {}
-lock = threading.Lock()
+request_lock = threading.Lock()
 
 def prijava(korisnicko_ime, lozinka, stranica):
     chromedriver_path = '/usr/local/bin/chromedriver'
@@ -114,7 +109,40 @@ def create_worksheets(spreadsheet):
     for ws_name in ["hep", "vio", "gpz", "a1"]:
         if ws_name not in [ws.title for ws in spreadsheet.worksheets()]:
             spreadsheet.add_worksheet(title=ws_name, rows="100", cols="100")
-            logging.debug(f"Worksheet '{ws_name}' created.")
+            print(f"Worksheet '{ws_name}' izrađen.")
+
+def process_request(korisnicko_ime, lozinka, stranica, request_id):
+    try:
+        driver = prijava(korisnicko_ime, lozinka, stranica)
+
+        gc = gspread.service_account(filename='api_keys/racuni.json')
+        spreadsheet = gc.open("Računi")
+
+        create_worksheets(spreadsheet)
+        worksheet = spreadsheet.worksheet(stranica)
+
+        if worksheet is None:
+            update_status(request_id, 'Error: Worksheet "{}" not found or created.'.format(stranica), False)
+            return
+
+        if stranica == 'vio':
+            dohvati_podatke_vio(driver, worksheet)
+        elif stranica == 'hep':
+            dohvati_podatke_hep(driver, worksheet)
+        elif stranica == 'gpz':
+            dohvati_podatke_gpz(driver, worksheet)
+        elif stranica == 'a1':
+            dohvati_podatke_a1(driver, worksheet)
+                
+        driver.quit()
+        update_status(request_id, 'Podatci uspješno upisani u Google Sheets - Worksheet: {}'.format(stranica), True)
+
+    except Exception as e:
+        update_status(request_id, 'Greška pri prikupljanju podataka: {}'.format(str(e)), False)
+
+def update_status(request_id, message, success):
+    with request_lock:
+        request_status[request_id] = {'result': message, 'success': success}
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
@@ -125,58 +153,28 @@ def index():
         lozinka = data.get('password')
         stranica = data.get('selectedPage')
 
-        logging.debug(f"Received request with username: {korisnicko_ime}, password: {lozinka}, page: {stranica}")
+        print(korisnicko_ime)
+        print(lozinka)
+        print(stranica)
 
         request_id = str(uuid.uuid4())
-        with lock:
-            request_status[request_id] = 'processing'
+        update_status(request_id, 'Request received and being processed.', None)
 
-        def process_request(request_id, korisnicko_ime, lozinka, stranica):
-            try:
-                driver = prijava(korisnicko_ime, lozinka, stranica)
-
-                gc = gspread.service_account(filename='api_keys/racuni.json')
-                spreadsheet = gc.open("Računi")
-
-                create_worksheets(spreadsheet)
-                worksheet = spreadsheet.worksheet(stranica)
-
-                if worksheet is None:
-                    logging.error(f'Error: Worksheet "{stranica}" not found or created.')
-                    with lock:
-                        request_status[request_id] = 'error'
-                    return
-
-                if stranica == 'vio':
-                    dohvati_podatke_vio(driver, worksheet)
-                elif stranica == 'hep':
-                    dohvati_podatke_hep(driver, worksheet)
-                elif stranica == 'gpz':
-                    dohvati_podatke_gpz(driver, worksheet)
-                elif stranica == 'a1':
-                    dohvati_podatke_a1(driver, worksheet)
-                        
-                driver.quit()
-                with lock:
-                    request_status[request_id] = 'completed'
-                logging.debug(f'Data successfully written to Google Sheets - Worksheet: {stranica}')
-            except Exception as e:
-                with lock:
-                    request_status[request_id] = 'error'
-                logging.error(f'Error during data collection: {str(e)}')
-
-        thread = threading.Thread(target=process_request, args=(request_id, korisnicko_ime, lozinka, stranica))
+        thread = threading.Thread(target=process_request, args=(korisnicko_ime, lozinka, stranica, request_id))
         thread.start()
 
-        return jsonify({'request_id': request_id}), 202
+        return jsonify({'result': 'Zahtjev je primljen. Podatci se obrađuju za Worksheet: {}'.format(stranica), 'request_id': request_id}), 202
 
     return render_template('index.html')
 
 @app.route('/status/<request_id>', methods=['GET'])
-def get_status(request_id):
-    with lock:
-        status = request_status.get(request_id, 'unknown')
-    return jsonify({'status': status})
+def check_status(request_id):
+    with request_lock:
+        status = request_status.get(request_id, None)
+    if status:
+        return jsonify(status), 200
+    else:
+        return jsonify({'status': 'unknown'}), 404
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
