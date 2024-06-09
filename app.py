@@ -136,7 +136,7 @@ def process_request(korisnicko_ime, lozinka, stranica, request_id):
         update_status(request_id, message, success)
 
     except Exception as e:
-        update_status(request_id, f'Login failed. Check if page is under maintenance.', False)
+        update_status(request_id, f'Login failed. Check username and password. If correct, check if page is under maintenance.', False)
 
 def update_status(request_id, message, success):
     request_status[request_id] = {'result': message, 'success': success}

@@ -1,45 +1,45 @@
-import requests
 from datetime import datetime
 from bs4 import BeautifulSoup
+import requests
 
 def dohvati_podatke_gpz(session, worksheet):
-    data_url = 'https://mojracun.gpz-opskrba.hr/racuni'
+    # Fetch HTML from the session
+    data_url = 'https://mojracun.gpz-opskrba.hr/promet.aspx'
     response = session.get(data_url)
-
-    if response.status_code != 200:
-        return 'Failed to fetch data from GPZ. The site may be undergoing maintenance.', False
-
     soup = BeautifulSoup(response.content, 'html.parser')
-    invoices = soup.find_all('div', class_='invoice-class')  # Adjust the selector based on actual HTML
 
-    if not invoices:
-        return 'No invoices found. The site may be undergoing maintenance or there may be no available invoices.', False
+    # Fetch all <tr> elements containing invoice data
+    svi_racuni = soup.find_all('tr')
+    svi_racuni = [racun for racun in svi_racuni if 'FAKTURA' in racun.get_text() or 'UPLATA' in racun.get_text()]
+
+    def get_date(racun):
+        date_string = racun.find_all('td')[0].get_text()
+        return datetime.strptime(date_string, '%d.%m.%Y')
+
+    svi_racuni.sort(key=get_date, reverse=True)
 
     # Add header if the worksheet is empty
     if not worksheet.get_all_values():
-        header_row = ['Datum', 'Vrsta', 'Iznos računa', 'Datum dospijeća', 'Link na PDF']
+        header_row = ['Datum', 'Vrsta', 'Iznos računa', 'Iznos uplate']
         worksheet.append_row(header_row)
 
+    latest_date_sheet = worksheet.cell(2, 1).value
+    if latest_date_sheet:
+        latest_date_sheet = datetime.strptime(latest_date_sheet, "%d.%m.%Y")
+        svi_racuni = [racun for racun in svi_racuni if datetime.strptime(racun.find_all('td')[0].get_text(), "%d.%m.%Y") > latest_date_sheet]
+
     data_to_insert = []
-    for invoice in invoices:
-        datum = invoice.find('span', class_='date-class').get_text(strip=True)
-        vrsta = 'Račun'
-        iznos_racuna = invoice.find('span', class_='amount-class').get_text(strip=True)
-        datum_dospijeca = invoice.find('span', class_='due-date-class').get_text(strip=True)
-        pdf_link = invoice.find('a', class_='pdf-link-class')['href']
-
-        if datum:
-            data_to_insert.append([datum, vrsta, iznos_racuna, datum_dospijeca, pdf_link])
-
+    for racun in svi_racuni:
+        datum, vrsta, iznos_racuna, iznos_uplate = extract_racun_data(racun)
+        if datum:  # Ensure valid data is being added
+            data_to_insert.append([datum, vrsta, iznos_racuna, iznos_uplate])
+    
     # Sort data by date before inserting into Google Sheets
     data_to_insert.sort(key=lambda x: datetime.strptime(x[0], "%d.%m.%Y"), reverse=True)
 
     # Insert all data at once
     if data_to_insert:
         worksheet.insert_rows(data_to_insert, 2, value_input_option='RAW')
-        return 'Data successfully inserted into the worksheet', True
-
-    return 'No new data to insert', True
 
 def extract_racun_data(racun):
     datum = racun.find_all('td')[0].get_text(strip=True)
