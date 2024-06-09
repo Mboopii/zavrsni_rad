@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: my-flask-app
+    env: docker
+    repo: rad
+    branch: main
+    dockerfilePath: ./Dockerfile
+    buildCommand: docker-compose build
+    startCommand: docker-compose up
+    envVars:
+      - key: SELENIUM_URL
+        value: http://selenium:4444/wd/hub
+    ports:
+      - port: 5000
