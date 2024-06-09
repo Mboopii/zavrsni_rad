@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Računi</title>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles/style.css') }}">
+</head>
+<body>
+  <div class="container mt-5">
+    <div class="row">
+      <div class="col-md-6 mb-4">
+        <div class="card">
+          <div class="card-body">
+            <h2 class="card-title text-center">Login podatci</h2>
+            <form id="loginForm">
+              <div class="form-group">
+                <label for="email">Email:</label>
+                <input type="email" class="form-control" id="email" name="email" required>
+              </div>
+
+              <div class="form-group">
+                <label for="password">Lozinka:</label>
+                <input type="password" class="form-control" id="password" name="password" required>
+              </div>
+
+              <div class="form-group">
+                <label for="page">Odaberite stranicu:</label>
+                <select class="form-control" id="page" name="page">
+                  <option value="hep">HEP</option>
+                  <option value="vio">VIO</option>
+                  <option value="gpz">GPZ</option>
+                  <option value="a1">A1</option>
+                </select>
+              </div>
+              <button type="submit" class="btn btn-primary btn-block">Izlistaj račune u Google Sheets</button>
+            </form>
+            <div id="result" class="mt-3 text-center"></div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-6 mb-4">
+        <div class="card">
+          <div class="card-body">
+            <h2 class="card-title text-center">Unos očitanja brojila</h2>
+            <form id="meterForm" enctype="multipart/form-data">
+              <div class="form-group">
+                <label for="meter-reading">Stanje brojila:</label>
+                <input type="text" class="form-control" id="meter-reading" name="meter-reading" required>
+              </div>
+              
+              <div class="form-group">
+                <label for="meter-image">Slika brojila:</label>
+                <input type="file" class="form-control-file" id="meter-image" name="meter-image" accept="image/*" required>
+              </div>
+              <button type="submit" class="btn btn-primary btn-block">Pošalji očitanje</button>
+            </form>
+            <div id="meter-result" class="mt-3 text-center"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="row">
+      <div class="col-12 text-center">
+        <h2>Upload Invoice PDF</h2>
+        <form id="pdfForm" enctype="multipart/form-data">
+          <div class="form-group">
+            <label for="invoiceType">Invoice Type:</label>
+            <select class="form-control" id="invoiceType" name="invoiceType" required>
+              <option value="" disabled selected>Select Invoice Type</option>
+              <option value="vio">VIO</option>
+              <option value="a1">A1</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="pdfFile">PDF File:</label>
+            <input type="file" class="form-control-file" id="pdfFile" name="file" accept="application/pdf" required>
+          </div>
+          <button type="submit" class="btn btn-primary btn-block">Upload and Extract</button>
+        </form>
+        <div id="pdf-result" class="mt-3"></div>
+      </div>
+    </div>
+    <div id="loader" class="loader" style="display: none;"></div>
+    <div class="loader-background" style="display: none;"></div>
+  </div>
+  <script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
+  <script src="{{ url_for('static', filename='scripts/script.js') }}"></script>
+  <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+</body>
+</html>

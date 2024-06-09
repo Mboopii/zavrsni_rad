@@ -1,0 +1,34 @@
+.position-relative {
+  position: relative;
+}
+
+.loader-background {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5); /* Semi-transparent background */
+  z-index: 9998; /* Just below the loader */
+  display: none; /* Start hidden */
+}
+
+.loader {
+  border: 8px solid #464646;
+  border-top: 8px solid rgb(0, 151, 252);
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  animation: spin 1s linear infinite;
+  display: none; /* Start hidden */
+  position: absolute; /* Absolute positioning within relative container */
+  top: 50%; /* Center vertically within the container */
+  left: 50%; /* Center horizontally within the container */
+  transform: translate(-50%, -50%); /* Offset to truly center */
+  z-index: 9999; /* Ensure it’s above other content */
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
