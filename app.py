@@ -15,7 +15,7 @@ from bs4 import BeautifulSoup
 
 creds = Credentials.from_service_account_file('api_keys/drive.json')
 app = Flask(__name__)
-CORS(app, supports_credentials=True)
+CORS(app, resources={r"/*": {"origins": "*"}})
 
 # Register the PDF blueprint
 app.register_blueprint(pdf_bp, url_prefix='/pdf')
@@ -33,36 +33,24 @@ def prijava(korisnicko_ime, lozinka, stranica):
     session = requests.Session()
 
     if stranica == 'hep':
-        login_url = 'https://mojracun.hep.hr/elektra/index.html#!/login'
-        response = session.get(login_url)
-        soup = BeautifulSoup(response.content, 'html.parser')
-
-        # Example payload, adjust according to the actual form data
+        login_url = 'https://mojracun.hep.hr/elektra/api/korisnik/prijava'
         login_payload = {
             'email': korisnicko_ime,
-            'inPwd': lozinka,
-            'uvjetiKoristenja': 'on'
+            'password': lozinka
         }
+        session.post(login_url, json=login_payload)
 
-        login_submit_url = 'https://mojracun.hep.hr/elektra/api/login'
-        session.post(login_submit_url, data=login_payload)
-
-        data_url = 'https://mojracun.hep.hr/elektra/api/data'
+        data_url = 'https://mojracun.hep.hr/elektra/api/promet'
         data_response = session.get(data_url)
         return data_response.json()
 
     elif stranica == 'vio':
-        login_url = 'https://www.vio.hr/mojvio/'
-        response = session.get(login_url)
-        soup = BeautifulSoup(response.content, 'html.parser')
-
+        login_url = 'https://www.vio.hr/mojvio/?a=login'
         login_payload = {
             'email': korisnicko_ime,
             'pass': lozinka
         }
-
-        login_submit_url = 'https://www.vio.hr/mojvio/login'
-        session.post(login_submit_url, data=login_payload)
+        session.post(login_url, data=login_payload)
 
         data_url = 'https://www.vio.hr/mojvio/?v=uplate'
         data_response = session.get(data_url)
@@ -73,29 +61,32 @@ def prijava(korisnicko_ime, lozinka, stranica):
         response = session.get(login_url)
         soup = BeautifulSoup(response.content, 'html.parser')
 
+        viewstate = soup.find('input', {'name': '__VIEWSTATE'})['value']
+        viewstategenerator = soup.find('input', {'name': '__VIEWSTATEGENERATOR'})['value']
+        eventvalidation = soup.find('input', {'name': '__EVENTVALIDATION'})['value']
+
         login_payload = {
             'email': korisnicko_ime,
-            'password': lozinka
+            'password': lozinka,
+            '__VIEWSTATE': viewstate,
+            '__VIEWSTATEGENERATOR': viewstategenerator,
+            '__EVENTVALIDATION': eventvalidation
         }
 
-        login_submit_url = 'https://mojracun.gpz-opskrba.hr/login'
-        session.post(login_submit_url, data=login_payload)
+        session.post(login_url, data=login_payload)
 
-        data_url = 'https://mojracun.gpz-opskrba.hr/data'
+        data_url = 'https://mojracun.gpz-opskrba.hr/promet.aspx'
         data_response = session.get(data_url)
         return data_response.json()
 
     elif stranica == 'a1':
         login_url = 'https://moj.a1.hr/prijava'
-        response = session.get(login_url)
-        soup = BeautifulSoup(response.content, 'html.parser')
-
         login_payload = {
             'fm_login_user': korisnicko_ime,
             'fm_login_pass': lozinka
         }
 
-        login_submit_url = 'https://moj.a1.hr/login'
+        login_submit_url = 'https://webauth.a1.hr/vasmpauth/ProcessLoginServlet'
         session.post(login_submit_url, data=login_payload)
 
         data_url = 'https://moj.a1.hr/postpaid/residential/pregled-racuna'

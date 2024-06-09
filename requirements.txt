@@ -8,7 +8,5 @@ google-auth-oauthlib==1.2.0
 gspread==5.12.4
 httplib2==0.22.0
 requests==2.32.3
-selenium==4.21.0
 PyMuPDF==1.21.1
 gunicorn==21.2.0
-werkzeug==3.0.1
