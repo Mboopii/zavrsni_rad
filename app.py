@@ -28,7 +28,7 @@ request_status = {}
 request_lock = threading.Lock()
 
 def create_driver():
-    selenium_url = os.environ.get('SELENIUM_URL', 'http://localhost:4444/wd/hub')
+    selenium_url = os.environ.get('SELENIUM_URL', 'http://selenium:4444/wd/hub')
     chrome_options = webdriver.ChromeOptions()
     chrome_options.add_argument('--headless')
     chrome_options.add_argument('--no-sandbox')
