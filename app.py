@@ -18,8 +18,9 @@ import threading
 import os
 import uuid
 import logging
+from werkzeug.serving import make_server
 
-# Setup logging
+# Configure logging
 logging.basicConfig(level=logging.DEBUG)
 
 creds = Credentials.from_service_account_file('api_keys/drive.json')
@@ -52,8 +53,12 @@ def prijava(korisnicko_ime, lozinka, stranica):
             login_url = 'https://mojracun.hep.hr/elektra/index.html#!/login'
             driver.get(login_url)
 
-            username_field = driver.find_element('id', 'email')
-            password_field = driver.find_element('id', 'inPwd')
+            username_field = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.ID, 'email'))
+            )
+            password_field = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.ID, 'inPwd'))
+            )
             
             username_field.send_keys(korisnicko_ime)
             password_field.send_keys(lozinka)
@@ -66,47 +71,65 @@ def prijava(korisnicko_ime, lozinka, stranica):
             password_field.send_keys(Keys.RETURN)
 
             time.sleep(3)
-            
+        
         elif stranica == 'vio':
             login_url = 'https://www.vio.hr/mojvio/'
             driver.get(login_url)
             
-            username_field = driver.find_element('id', 'email')
-            password_field = driver.find_element('id', 'pass')
+            username_field = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.ID, 'email'))
+            )
+            password_field = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.ID, 'pass'))
+            )
             
             username_field.send_keys(korisnicko_ime)
             password_field.send_keys(lozinka)
             
             password_field.send_keys(Keys.RETURN)
             
-            driver.get('https://www.vio.hr/mojvio/?v=uplate')
+            WebDriverWait(driver, 10).until(
+                EC.url_to_be('https://www.vio.hr/mojvio/?v=uplate')
+            )
             time.sleep(1)
-            
+        
         elif stranica == 'gpz':
             login_url = 'https://mojracun.gpz-opskrba.hr/login.aspx'
             driver.get(login_url)
             
-            username_field = driver.find_element('id', 'email')
-            password_field = driver.find_element('id', 'password')
+            username_field = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.ID, 'email'))
+            )
+            password_field = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.ID, 'password'))
+            )
             
             username_field.send_keys(korisnicko_ime)
             password_field.send_keys(lozinka)
             
             password_field.send_keys(Keys.RETURN)
-            
+        
         elif stranica == 'a1':
             login_url = 'https://moj.a1.hr/prijava'
             driver.get(login_url)
 
-            username_field = driver.find_element(By.ID, 'fm_login_user')
-            password_field = driver.find_element(By.ID, 'fm_login_pass')
-            login_button = driver.find_element(By.CSS_SELECTOR, 'button.btn.btn-primary')
+            username_field = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.ID, 'fm_login_user'))
+            )
+            password_field = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.ID, 'fm_login_pass'))
+            )
+            login_button = WebDriverWait(driver, 10).until(
+                EC.element_to_be_clickable((By.CSS_SELECTOR, 'button.btn.btn-primary'))
+            )
 
             username_field.send_keys(korisnicko_ime)
             password_field.send_keys(lozinka)
             login_button.click()
 
-            driver.get('https://moj.a1.hr/postpaid/residential/pregled-racuna')
+            WebDriverWait(driver, 10).until(
+                EC.url_to_be('https://moj.a1.hr/postpaid/residential/pregled-racuna')
+            )
 
         return driver
 
@@ -187,4 +210,5 @@ def check_status(request_id):
         return jsonify({'status': 'unknown'}), 404
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+    server = make_server('0.0.0.0', 5000, app)
+    server.serve_forever()

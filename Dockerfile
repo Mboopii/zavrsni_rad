@@ -58,5 +58,5 @@ COPY api_keys /app/api_keys
 # Install Python dependencies
 RUN pip install -r requirements.txt
 
-# Run the application
-CMD ["gunicorn", "-b", "0.0.0.0:5000", "app:app", "--workers=4", "--threads=4"]
+# Run the application with Werkzeug server
+CMD ["python", "app.py"]
