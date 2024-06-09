@@ -22,6 +22,8 @@ RUN wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key
 RUN CHROMEDRIVER_VERSION=125.0.6422.141 \
   && wget -O /tmp/chromedriver.zip https://storage.googleapis.com/chrome-for-testing-public/$CHROMEDRIVER_VERSION/linux64/chromedriver-linux64.zip \
   && unzip /tmp/chromedriver.zip -d /usr/local/bin/ \
+  && mv /usr/local/bin/chromedriver-linux64 /usr/local/bin/chromedriver \
+  && chmod +x /usr/local/bin/chromedriver \
   && rm /tmp/chromedriver.zip
 
 # Set display port to avoid crash
