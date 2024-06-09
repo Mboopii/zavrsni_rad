@@ -13,54 +13,48 @@ parent_folder_id = "1THhhwZKmJwFgtT6owYaEB7c1K31PANnU"
 
 creds = Credentials.from_service_account_file(service_account_file, scopes=scopes)
 
+import requests
+from datetime import datetime
+from bs4 import BeautifulSoup
+
 def dohvati_podatke_vio(session, worksheet):
-    # Fetch HTML from the session
-    response = session.get('https://www.vio.hr/mojvio/?v=uplate')
+    data_url = 'https://www.vio.hr/mojvio/racuni'
+    response = session.get(data_url)
+
+    if response.status_code != 200:
+        return 'Failed to fetch data from VIO. The site may be undergoing maintenance.', False
+
     soup = BeautifulSoup(response.content, 'html.parser')
+    invoices = soup.find_all('div', class_='invoice-class')  # Adjust the selector based on actual HTML
 
-    # Fetch all <tr> elements containing invoice data
-    svi_racuni = soup.find_all('tr')
-
-    # Filter rows based on the presence of 'Racun' or 'Uplata' in the text
-    svi_racuni = [racun for racun in svi_racuni if 'Racun' in racun.get_text() or 'Uplata' in racun.get_text()]
+    if not invoices:
+        return 'No invoices found. The site may be undergoing maintenance or there may be no available invoices.', False
 
     # Add header if the worksheet is empty
     if not worksheet.get_all_values():
-        header_row = ['Datum', 'Datum dospijeća', 'Vrsta', 'Iznos računa', 'Iznos uplate', 'Link na PDF']
+        header_row = ['Datum', 'Vrsta', 'Iznos računa', 'Datum dospijeća', 'Link na PDF']
         worksheet.append_row(header_row)
 
-    latest_date_sheet = worksheet.cell(2, 1).value
-    if latest_date_sheet:
-        latest_date_sheet = datetime.strptime(latest_date_sheet, "%d.%m.%Y")
-        svi_racuni = [racun for racun in svi_racuni if datetime.strptime(racun.find_all('td')[0].get_text(), "%d.%m.%Y") > latest_date_sheet]
-
     data_to_insert = []
-    pdf_upload_threads = []
-    pdf_links = {}
-    for racun in reversed(svi_racuni):
-        datum, datum_dospijeca, vrsta, iznos_racuna, iznos_uplate, pdf_link = extract_racun_data(racun)
-        if datum:
-            data_to_insert.append([datum, datum_dospijeca, vrsta, iznos_racuna, iznos_uplate, pdf_link])
-            if vrsta == 'Racun' and pdf_link:
-                thread = threading.Thread(target=upload_pdf_to_drive, args=(pdf_link, datum, pdf_links))
-                pdf_upload_threads.append(thread)
-                thread.start()
-    
-    # Wait for all PDF uploads to complete
-    for thread in pdf_upload_threads:
-        thread.join()
+    for invoice in invoices:
+        datum = invoice.find('span', class_='date-class').get_text(strip=True)
+        vrsta = 'Račun'
+        iznos_racuna = invoice.find('span', class_='amount-class').get_text(strip=True)
+        datum_dospijeca = invoice.find('span', class_='due-date-class').get_text(strip=True)
+        pdf_link = invoice.find('a', class_='pdf-link-class')['href']
 
-    # Update the data with actual Google Drive links
-    for row in data_to_insert:
-        if row[5] in pdf_links:
-            row[5] = pdf_links[row[5]]
-    
-    # Sort data by date
+        if datum:
+            data_to_insert.append([datum, vrsta, iznos_racuna, datum_dospijeca, pdf_link])
+
+    # Sort data by date before inserting into Google Sheets
     data_to_insert.sort(key=lambda x: datetime.strptime(x[0], "%d.%m.%Y"), reverse=True)
 
     # Insert all data at once
     if data_to_insert:
         worksheet.insert_rows(data_to_insert, 2, value_input_option='RAW')
+        return 'Data successfully inserted into the worksheet', True
+
+    return 'No new data to insert', True
 
 def extract_racun_data(racun):
     # Extract the data from each column

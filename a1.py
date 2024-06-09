@@ -18,10 +18,20 @@ def dohvati_podatke_a1(session, worksheet):
     # Fetch HTML from the session
     data_url = 'https://moj.a1.hr/postpaid/residential/pregled-racuna'
     response = session.get(data_url)
+    
+    if response.status_code == 302 and "nedostupno" in response.headers.get('Location', ''):
+        return 'A1 site is currently under maintenance. Please try again later.', False
+
+    if response.status_code != 200:
+        return 'Failed to fetch data from A1. The site may be undergoing maintenance.', False
+
     soup = BeautifulSoup(response.content, 'html.parser')
 
     # Fetch all elements containing visible invoice data
     svi_racuni = soup.find_all('div', class_='mv-Payment g-12 g-reset g-rwd p')
+    if not svi_racuni:
+        return 'No invoices found. The site may be undergoing maintenance or there may be no available invoices.', False
+
     visible_racuni = [racun for racun in svi_racuni if not is_hidden(racun)]
 
     # Add header if the worksheet is empty
@@ -61,6 +71,9 @@ def dohvati_podatke_a1(session, worksheet):
     # Insert all data at once
     if data_to_insert:
         worksheet.insert_rows(data_to_insert, 2, value_input_option='RAW')
+        return 'Data successfully inserted into the worksheet', True
+
+    return 'No new data to insert', True
 
 def is_hidden(element):
     parent = element.find_parent(attrs={"class": "js-toggle-section hide"})
