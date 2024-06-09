@@ -37,6 +37,7 @@ def dohvati_podatke_hep(session, worksheet, kupac_id):
         svi_racuni = [racun for racun in svi_racuni if datetime.strptime(racun['Datum'][:10], "%Y-%m-%d") > latest_date_sheet]
 
     data_to_insert = []
+    pdf_upload_threads = []
     pdf_links = {}
     for racun in svi_racuni:
         datum_racuna = racun['Datum'][:10]
@@ -49,8 +50,23 @@ def dohvati_podatke_hep(session, worksheet, kupac_id):
             datum_formatted = datetime.strptime(datum_racuna, "%Y-%m-%d").strftime("%Y_%m_%d")
             pdf_link = ""
             if vrsta == 'Račun' and racun_id:
-                pdf_link = fetch_and_upload_pdf(session, kupac_id, racun_id, datum_formatted, pdf_links)
+                pdf_url = 'https://mojracun.hep.hr/elektra/api/report/racun'
+                payload = {
+                    'kupacId': kupac_id,
+                    'racunId': racun_id,
+                    'time': random.random()  #dinamički generira random float između 0 i 1
+                }
+                headers = {
+                    'Content-Type': 'application/json'
+                }
+                thread = threading.Thread(target=fetch_and_upload_pdf, args=(session, pdf_url, payload, datum_formatted, pdf_links))
+                pdf_upload_threads.append(thread)
+                thread.start()
             data_to_insert.append([datetime.strptime(datum_racuna, "%Y-%m-%d").strftime("%d.%m.%y"), vrsta, iznos_racuna, iznos_uplate, pdf_link])
+
+    # Wait for all PDF uploads to complete
+    for thread in pdf_upload_threads:
+        thread.join()
 
     # Update the data with actual Google Drive links
     for row in data_to_insert:
@@ -67,17 +83,8 @@ def dohvati_podatke_hep(session, worksheet, kupac_id):
 
     return 'No new data to insert', True
 
-def fetch_and_upload_pdf(session, kupac_id, racun_id, datum, pdf_links):
-    pdf_url = 'https://mojracun.hep.hr/elektra/api/report/racun'
-    payload = {
-        'kupacId': kupac_id,
-        'racunId': racun_id,
-        'time': random.random()  #dinamički generira random float između 0 i 1
-    }
-    headers = {
-        'Content-Type': 'application/json'
-    }
-    response = session.post(pdf_url, json=payload, headers=headers)
+def fetch_and_upload_pdf(session, pdf_url, payload, datum, pdf_links):
+    response = session.post(pdf_url, json=payload)
 
     if response.status_code == 200:
         pdf_filename = f"Racun_{datum}.pdf"
@@ -99,10 +106,7 @@ def fetch_and_upload_pdf(session, kupac_id, racun_id, datum, pdf_links):
             ).execute()
 
             pdf_links[pdf_url] = file['webViewLink']  #mapiraj izvorni URL na google drive link
-            return file['webViewLink']
         except Exception as e:
             pdf_links[pdf_url] = ""  #u slučaju greške, vrati prazan link
-            return ""
     else:
         pdf_links[pdf_url] = ""  #u slučaju greške, vrati prazan link
-        return ""
