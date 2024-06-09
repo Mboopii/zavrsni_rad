@@ -29,6 +29,9 @@ ENV DISPLAY=:99
 COPY . /app
 WORKDIR /app
 
+# Copy the API keys
+COPY api_keys /app/api_keys
+
 # Install Python dependencies
 RUN pip install -r requirements.txt
 

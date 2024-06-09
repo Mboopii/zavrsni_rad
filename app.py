@@ -15,7 +15,7 @@ from selenium.webdriver.chrome.service import Service
 from google.oauth2.service_account import Credentials
 from pdf import pdf_bp
 
-creds = Credentials.from_service_account_file(filename='api_keys/drive.json')
+creds = Credentials.from_service_account_file('api_keys/drive.json')
 app = Flask(__name__)
 CORS(app, supports_credentials=True)
 
@@ -23,17 +23,18 @@ CORS(app, supports_credentials=True)
 app.register_blueprint(pdf_bp, url_prefix='/pdf')
 
 def prijava(korisnicko_ime, lozinka, stranica):
-    chromedriver_path = 'chrome/chromedriver/chromedriver.exe'
-    chrome_executable_path = 'chrome/chrome-win64/chrome.exe'
+    chromedriver_path = '/usr/local/bin/chromedriver'
+    chrome_executable_path = '/usr/bin/google-chrome'
 
     chrome_options = webdriver.ChromeOptions()
     chrome_options.binary_location = chrome_executable_path
-    chrome_options.add_argument('--enable-chrome-browser-cloud-management')
+    chrome_options.add_argument('--headless')
+    chrome_options.add_argument('--no-sandbox')
+    chrome_options.add_argument('--disable-dev-shm-usage')
 
     service = Service(executable_path=chromedriver_path)
-
     driver = webdriver.Chrome(service=service, options=chrome_options)
-
+    
     if stranica == 'hep':
         login_url = 'https://mojracun.hep.hr/elektra/index.html#!/login'
         driver.get(login_url)
