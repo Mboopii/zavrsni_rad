@@ -1,5 +1,5 @@
-import re
 import os
+import re
 import fitz
 from flask import Blueprint, request, jsonify
 
@@ -12,11 +12,9 @@ def ensure_upload_directory_exists(directory):
 def extract_text_from_pdf(pdf_path):
     pdf_document = fitz.open(pdf_path)
     text = ""
-
     for page_num in range(pdf_document.page_count):
         page = pdf_document.load_page(page_num)
         text += page.get_text()
-
     return text
 
 def extract_invoice_details(text, invoice_type):
@@ -24,6 +22,8 @@ def extract_invoice_details(text, invoice_type):
         return extract_vio_invoice_details(text)
     elif invoice_type == 'a1':
         return extract_a1_invoice_details(text)
+    elif invoice_type == 'hep':
+        return extract_hep_invoice_details(text)
     else:
         return {"error": "Unsupported invoice type"}
 
@@ -35,65 +35,71 @@ def extract_vio_invoice_details(text):
         "due_date": r"Dospijeće:\s+(\d{2}\.\d{2}\.\d{4})",
         "customer_name": r"Naziv kupca:\s+([^\n]+)",  # Stop at newline
         "amount_due": r"Iznos računa:\s+([\d,]+) EUR",
+        "iban": r"\bHR\d{19}\b",  # Matches the IBAN directly
     }
 
     details = {}
     for key, pattern in patterns.items():
-        match = re.search(pattern, text, re.IGNORECASE | re.DOTALL)
-        if match:
+        matches = re.findall(pattern, text, re.IGNORECASE | re.DOTALL)
+        if matches:
             if key == "invoice_period":
-                details[key] = f"{match.group(1)} to {match.group(2)}"
+                details[key] = f"{matches[0][0]} to {matches[0][1]}"
             else:
-                details[key] = match.group(1).strip()
+                details[key] = matches[0].strip()
         else:
             details[key] = None
 
-    meter_readings = []
-    meter_rows = re.findall(r"(\d{2}\.\d{2}\.\d{4})\s+[O|P]\s+(\d+)\s+(\d+)\s+(\d+)", text)
-
-    for row in meter_rows:
-        date, meter_number, meter_reading, consumption = row
-        meter_readings.append({
-            "date": date,
-            "meter_number": meter_number,
-            "meter_reading": meter_reading,
-            "consumption": consumption
-        })
-
-    details['meter_readings'] = meter_readings
-
     return details
+
 
 def extract_a1_invoice_details(text):
     patterns = {
         "invoice_number": r"Broj računa:\s+(\d+)",
-        "invoice_period": r"za razdoblje:\s+(\d{2}\.\d{2}\.\d{4}.)\s*-\s*(\d{2}\.\d{2}\.\d{4}.)",
+        "invoice_period": r"za razdoblje:\s+(\d{2}\.\d{2}\.\d{4}\.)\s*-\s*(\d{2}\.\d{2}\.\d{4}\.)",
         "invoice_date": r"Datum izdavanja:\s+(\d{2}\.\d{2}\.\d{4})",
         "due_date": r"Datum dospijeća:\s+(\d{2}\.\d{2}\.\d{4})",
         "customer_name": r"Platno odgovorna osoba:\s+([^,]+),\s+([^,]+),\s+([^\n]+)",  # Separate name and address
         "amount_due": r"ZA PLATITI\s+([\d,]+)",
+        "iban": r"\bHR\d{19}\b",
     }
 
     details = {}
     for key, pattern in patterns.items():
-        match = re.search(pattern, text, re.IGNORECASE | re.DOTALL)
-        if match:
+        matches = re.findall(pattern, text, re.IGNORECASE | re.DOTALL)
+        if matches:
             if key == "invoice_period":
-                details[key] = f"{match.group(1)} to {match.group(2)}"
+                details[key] = f"{matches[0][0]} to {matches[0][1]}"
             elif key == "customer_name":
-                details["customer_name"] = match.group(1).strip()
-                details["customer_address"] = f"{match.group(2).strip()}, {match.group(3).strip()}"
+                details["customer_name"] = matches[0][0].strip()
+                details["customer_address"] = f"{matches[0][1].strip()}, {matches[0][2].strip()}"
             else:
-                details[key] = match.group(1).strip()
+                details[key] = matches[0].strip() if isinstance(matches[0], str) else matches[0][0].strip()
         else:
             details[key] = None
 
-    if details['invoice_period'] is None:
-        period_context = re.search(r"Račun za pružene usluge\s+za razdoblje:\s+(\d{2}\.\d{2}\.\d{4})\s*-\s*(\d{2}\.\d{2}\.\d{4})", text, re.IGNORECASE | re.DOTALL)
-        if period_context:
-            details["invoice_period"] = f"{period_context.group(1)} to {period_context.group(2)}"
+    return details
+
+def extract_hep_invoice_details(text):
+    patterns = {
+        "invoice_number": r"Ugovorni račun:\s+(\d+)",
+        "invoice_period": r"razdoblje\s+(\d{2}\.\d{2}\.\d{4})\s+-\s+(\d{2}\.\d{2}\.\d{4})",
+        "invoice_date": r"Datum računa:\s+(\d{2}\.\d{2}\.\d{4})",
+        "due_date": r"Datum dospijeća:\s+(\d{2}\.\d{2}\.\d{4})",
+        "customer_name": r"Kupac:\s+([^\n]+)",
+        "amount_due": r"UKUPAN IZNOS RAČUNA\s+([\d,]+)",
+        "iban": r"\bHR\d{19}\b",  # Matches the IBAN directly
+    }
+
+    details = {}
+    for key, pattern in patterns.items():
+        matches = re.findall(pattern, text, re.IGNORECASE | re.DOTALL)
+        if matches:
+            if key == "invoice_period":
+                details[key] = f"{matches[0][0]} to {matches[0][1]}"
+            else:
+                details[key] = matches[0].strip()
         else:
-            print("Invoice Period Debug - No context found for invoice period in text")
+            details[key] = None
 
     return details
 
@@ -114,9 +120,10 @@ def upload_invoice():
         file.save(file_path)
 
         pdf_text = extract_text_from_pdf(file_path)
-        print("Extracted Text:\n", pdf_text)  # Debug: Print the extracted text
-
-        invoice_type = request.form.get('invoice_type', 'vio')
+        print(pdf_text)
+        invoice_type = request.form.get('invoice_type')
+        if not invoice_type:
+            return jsonify({"error": "Invoice type not provided"}), 400
         invoice_details = extract_invoice_details(pdf_text, invoice_type)
         
         print("Invoice Details:\n", invoice_details)  # Debug: Print the extracted details

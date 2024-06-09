@@ -119,7 +119,7 @@ async function submitPdfForm(event) {
         if (response.ok) {
             const data = await response.json();
             const orderedKeys = [
-                'invoice_number', 'customer_name', 'invoice_date', 'due_date',
+                'invoice_number', 'customer_name', 'iban', 'invoice_date', 'due_date',
                 'amount_due', 'total_amount', 'invoice_period', 'meter_readings'
             ];
             let resultHtml = '<table class="table table-bordered">';

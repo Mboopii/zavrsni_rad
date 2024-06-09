@@ -67,8 +67,9 @@
         <form id="pdfForm" enctype="multipart/form-data">
           <div class="form-group">
             <label for="invoiceType">Invoice Type:</label>
-            <select class="form-control" id="invoiceType" name="invoiceType" required>
+            <select class="form-control" id="invoiceType" name="invoice_type" required>
               <option value="" disabled selected>Select Invoice Type</option>
+              <option value="hep">HEP</option>
               <option value="vio">VIO</option>
               <option value="a1">A1</option>
             </select>
@@ -86,7 +87,7 @@
     <div class="loader-background" style="display: none;"></div>
   </div>
   <script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
-  <script src="{{ url_for('static', filename='scripts/script.js') }}"></script>
+  <script src="{{ url_for('static', filename='scripts/local_script.js') }}"></script>
   <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
 </body>
 </html>
