@@ -1,110 +1,114 @@
 import threading
 from datetime import datetime
-from bs4 import BeautifulSoup
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 import requests
 import io
+import random
 
+#inicijalizacija google drive api vjerodajnica
 scopes = ['https://www.googleapis.com/auth/drive']
 service_account_file = 'api_keys/drive.json'
-parent_folder_id = "1THhhwZKmJwFgtT6owYaEB7c1K31PANnU"
+parent_folder_id = "17WYhCuwD_HkIkmNWcJJTOvDSc0d577vE"
 
 creds = Credentials.from_service_account_file(service_account_file, scopes=scopes)
 
-def dohvati_podatke_vio(session, worksheet):
-    # Fetch HTML from the session
-    response = session.get('https://www.vio.hr/mojvio/?v=uplate')
-    soup = BeautifulSoup(response.content, 'html.parser')
+def dohvati_podatke_hep(session, worksheet, kupac_id):
+    #dohvati podatke s novog krajnjeg točka
+    data_url = f'https://mojracun.hep.hr/elektra/api/promet/{kupac_id}'
+    response = session.get(data_url)
 
-    # Fetch all <tr> elements containing invoice data
-    svi_racuni = soup.find_all('tr')
+    try:
+        data = response.json()
+    except ValueError:
+        return 'Neuspjelo parsiranje HEP podataka.', False
 
-    # Filter rows based on the presence of 'Racun' or 'Uplata' in the text
-    svi_racuni = [racun for racun in svi_racuni if 'Racun' in racun.get_text() or 'Uplata' in racun.get_text()]
+    svi_racuni = data.get('promet_lista', [])
 
-    # Add header if the worksheet is empty
+    #dodaj zaglavlje ako je radni list prazan
     if not worksheet.get_all_values():
-        header_row = ['Datum', 'Datum dospijeća', 'Vrsta', 'Iznos računa', 'Iznos uplate', 'Link na PDF']
+        header_row = ['Datum računa', 'Vrsta', 'Iznos računa', 'Iznos uplate', 'Link na PDF']
         worksheet.append_row(header_row)
 
     latest_date_sheet = worksheet.cell(2, 1).value
     if latest_date_sheet:
-        latest_date_sheet = datetime.strptime(latest_date_sheet, "%d.%m.%Y")
-        svi_racuni = [racun for racun in svi_racuni if datetime.strptime(racun.find_all('td')[0].get_text(), "%d.%m.%Y") > latest_date_sheet]
+        latest_date_sheet = datetime.strptime(latest_date_sheet, "%d.%m.%y")
+        svi_racuni = [racun for racun in svi_racuni if datetime.strptime(racun['Datum'][:10], "%Y-%m-%d") > latest_date_sheet]
 
     data_to_insert = []
     pdf_upload_threads = []
     pdf_links = {}
-    for racun in reversed(svi_racuni):
-        datum, datum_dospijeca, vrsta, iznos_racuna, iznos_uplate, pdf_link = extract_racun_data(racun)
-        if datum:
-            data_to_insert.append([datum, datum_dospijeca, vrsta, iznos_racuna, iznos_uplate, pdf_link])
-            if vrsta == 'Racun' and pdf_link:
-                thread = threading.Thread(target=upload_pdf_to_drive, args=(pdf_link, datum, pdf_links))
+    for racun in svi_racuni:
+        datum_racuna = racun['Datum'][:10]
+        vrsta = racun['Opis']
+        iznos_racuna = racun.get('Duguje', '') if racun.get('Duguje') != 0 else ''
+        iznos_uplate = racun.get('Potrazuje', '') if racun.get('Potrazuje') != 0 else ''
+        racun_id = racun.get('Racun')
+
+        if datum_racuna:
+            datum_formatted = datetime.strptime(datum_racuna, "%Y-%m-%d").strftime("%d.%m.%y")
+            pdf_link = ""
+            if racun_id:
+                thread = threading.Thread(target=upload_pdf_to_drive, args=(session, kupac_id, racun_id, datum_formatted, pdf_links))
                 pdf_upload_threads.append(thread)
                 thread.start()
-    
-    # Wait for all PDF uploads to complete
+            data_to_insert.append([datum_formatted, vrsta, iznos_racuna, iznos_uplate, racun_id])
+
+    #čekaj da se svi PDF-ovi učitaju
     for thread in pdf_upload_threads:
         thread.join()
 
-    # Update the data with actual Google Drive links
+    #ažuriraj podatke s pravim linkovima na google drive
     for row in data_to_insert:
-        if row[5] in pdf_links:
-            row[5] = pdf_links[row[5]]
+        if row[4] in pdf_links:
+            row[4] = pdf_links[row[4]]
+        else:
+            row[4] = ""  #ako nema PDF linka, postavi prazno polje
     
-    # Sort data by date
-    data_to_insert.sort(key=lambda x: datetime.strptime(x[0], "%d.%m.%Y"), reverse=True)
+    #sortiraj podatke po datumu prije umetanja u google sheets
+    data_to_insert.sort(key=lambda x: datetime.strptime(x[0], "%d.%m.%y"), reverse=True)
 
-    # Insert all data at once
+    #umetni sve podatke odjednom
     if data_to_insert:
         worksheet.insert_rows(data_to_insert, 2, value_input_option='RAW')
+        return 'Podaci uspješno umetnuti u radni list', True
 
-def extract_racun_data(racun):
-    # Extract the data from each column
-    datum = racun.find_all('td')[0].get_text(strip=True)
-    datum_dospijeca = racun.find_all('td')[1].get_text(strip=True)
-    opis = racun.find_all('td')[2].get_text(strip=True)
-    iznos_racuna = racun.find_all('td')[3].get_text(strip=True)
-    iznos_uplate = racun.find_all('td')[4].get_text(strip=True)
-    
-    vrsta = 'Racun' if 'Racun' in opis else 'Uplata'
+    return 'Nema novih podataka za umetanje', True
 
-    # Extract PDF link for "Racun"
-    pdf_link = ""
-    if vrsta == 'Racun':
-        pdf_element = racun.find('td', {'style': 'text-align:center;cursor:pointer;'}).find('a')
-        if pdf_element:
-            pdf_link = pdf_element['href']
-
-    return datum, datum_dospijeca, vrsta, iznos_racuna, iznos_uplate, pdf_link
-
-def upload_pdf_to_drive(pdf_url, datum, pdf_links):
-    formatted_date = datetime.strptime(datum, "%d.%m.%Y").strftime("%Y_%m_%d")
-    pdf_filename = f"Racun_{formatted_date}.pdf"
-    response = requests.get(pdf_url)
-
-    service = build('drive', 'v3', credentials=creds)
-    content = io.BytesIO(response.content)
-
-    file_metadata = {
-        'name': pdf_filename,
-        'parents': [parent_folder_id]
+def upload_pdf_to_drive(session, kupac_id, racun_id, datum, pdf_links):
+    pdf_url = 'https://mojracun.hep.hr/elektra/api/report/racun'
+    payload = {
+        'kupacId': kupac_id,
+        'racunId': racun_id,
+        'time': random.random()  #dinamički generiraj slučajni float između 0 i 1
     }
+    headers = {
+        'Content-Type': 'application/json'
+    }
+    response = session.post(pdf_url, json=payload, headers=headers)
 
-    media_body = MediaIoBaseUpload(content, mimetype='application/pdf', resumable=True)
+    if response.status_code == 200:
+        pdf_filename = f"Racun_{datum}.pdf"
+        content = io.BytesIO(response.content)
 
-    try:
-        file = service.files().create(
-            body=file_metadata,
-            media_body=media_body,
-            fields='id, webViewLink'
-        ).execute()
+        service = build('drive', 'v3', credentials=creds)
+        file_metadata = {
+            'name': pdf_filename,
+            'parents': [parent_folder_id]
+        }
 
-        print(f"{datum}, {pdf_filename} - Datoteka uspješno učitana.")
-        pdf_links[pdf_url] = file['webViewLink']  # Map original URL to Google Drive link
-    except Exception as e:
-        print(f"Pogreška prilikom učitavanja datoteke na Google Drive: {e}")
-        pdf_links[pdf_url] = ""  # In case of error, return an empty link
+        media_body = MediaIoBaseUpload(content, mimetype='application/pdf', resumable=True)
+
+        try:
+            file = service.files().create(
+                body=file_metadata,
+                media_body=media_body,
+                fields='id, webViewLink'
+            ).execute()
+
+            pdf_links[racun_id] = file['webViewLink']  #mapiraj racun_id na google drive link
+        except Exception as e:
+            pdf_links[racun_id] = ""  #u slučaju greške, vrati prazan link
+    else:
+        pdf_links[racun_id] = ""  #u slučaju greške, vrati prazan link

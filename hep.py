@@ -48,7 +48,7 @@ def dohvati_podatke_hep(session, worksheet, kupac_id):
             iznos_uplate = racun.get('Potrazuje', '') if racun.get('Potrazuje') != 0 else ''
             racun_id = racun.get('Racun')
             
-            datum_formatted = datetime.strptime(datum_racuna, "%Y-%m-%d").strftime("%d_%m_%y")
+            datum_formatted = datetime.strptime(datum_racuna, "%Y-%m-%d").strftime("%d.%m.%y")
             pdf_link = ""
             if racun_id:
                 pdf_tasks.append(executor.submit(fetch_and_upload_pdf, session, kupac_id, racun_id, datum_formatted))
