@@ -9,7 +9,7 @@ async function submitForm(event) {
     document.querySelector('.loader-background').style.display = 'block';
 
     try {
-        const response = await fetch('https://sheets-scraping.onrender.com/', {
+        const response = await fetch('https://rad-hom7.onrender.com/', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
