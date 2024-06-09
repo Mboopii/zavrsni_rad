@@ -1,10 +1,11 @@
-import random
-import io
+import threading
 from datetime import datetime
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import requests
+import io
+import random
 
 #inicijalizacija google drive api vjerodajnica
 scopes = ['https://www.googleapis.com/auth/drive']
@@ -36,28 +37,27 @@ def dohvati_podatke_hep(session, worksheet, kupac_id):
         svi_racuni = [racun for racun in svi_racuni if datetime.strptime(racun['Datum'][:10], "%Y-%m-%d") > latest_date_sheet]
 
     data_to_insert = []
-    pdf_tasks = []
+    pdf_upload_threads = []
     pdf_links = {}
+    for racun in svi_racuni:
+        datum_racuna = racun['Datum'][:10]
+        vrsta = racun['Opis']
+        iznos_racuna = racun.get('Duguje', '') if racun.get('Duguje') != 0 else ''
+        iznos_uplate = racun.get('Potrazuje', '') if racun.get('Potrazuje') != 0 else ''
+        racun_id = racun.get('Racun')
 
-    #koristi ThreadPoolExecutor za asinkrono učitavanje PDF-ova
-    with ThreadPoolExecutor(max_workers=10) as executor:
-        for racun in svi_racuni:
-            datum_racuna = racun['Datum'][:10]
-            vrsta = racun['Opis']
-            iznos_racuna = racun.get('Duguje', '') if racun.get('Duguje') != 0 else ''
-            iznos_uplate = racun.get('Potrazuje', '') if racun.get('Potrazuje') != 0 else ''
-            racun_id = racun.get('Racun')
-            
+        if datum_racuna:
             datum_formatted = datetime.strptime(datum_racuna, "%Y-%m-%d").strftime("%d.%m.%y")
             pdf_link = ""
             if racun_id:
-                pdf_tasks.append(executor.submit(fetch_and_upload_pdf, session, kupac_id, racun_id, datum_formatted))
+                thread = threading.Thread(target=upload_pdf_to_drive, args=(session, kupac_id, racun_id, datum_formatted, pdf_links))
+                pdf_upload_threads.append(thread)
+                thread.start()
             data_to_insert.append([datum_formatted, vrsta, iznos_racuna, iznos_uplate, racun_id])
 
-        #čekaj da se svi PDF-ovi učitaju
-        for task in as_completed(pdf_tasks):
-            result = task.result()
-            pdf_links[result['racun_id']] = result['pdf_link']
+    #čekaj da se svi PDF-ovi učitaju
+    for thread in pdf_upload_threads:
+        thread.join()
 
     #ažuriraj podatke s pravim linkovima na google drive
     for row in data_to_insert:
@@ -76,7 +76,7 @@ def dohvati_podatke_hep(session, worksheet, kupac_id):
 
     return 'Nema novih podataka za umetanje', True
 
-def fetch_and_upload_pdf(session, kupac_id, racun_id, datum):
+def upload_pdf_to_drive(session, kupac_id, racun_id, datum, pdf_links):
     pdf_url = 'https://mojracun.hep.hr/elektra/api/report/racun'
     payload = {
         'kupacId': kupac_id,
@@ -88,7 +88,6 @@ def fetch_and_upload_pdf(session, kupac_id, racun_id, datum):
     }
     response = session.post(pdf_url, json=payload, headers=headers)
 
-    result = {'racun_id': racun_id, 'pdf_link': ""}
     if response.status_code == 200:
         pdf_filename = f"Racun_{datum}.pdf"
         content = io.BytesIO(response.content)
@@ -108,7 +107,8 @@ def fetch_and_upload_pdf(session, kupac_id, racun_id, datum):
                 fields='id, webViewLink'
             ).execute()
 
-            result['pdf_link'] = file['webViewLink']  #vrati link na google drive
+            pdf_links[racun_id] = file['webViewLink']  #mapiraj racun_id na google drive link
         except Exception as e:
-            pass
-    return result
+            pdf_links[racun_id] = ""  #u slučaju greške, vrati prazan link
+    else:
+        pdf_links[racun_id] = ""  #u slučaju greške, vrati prazan link
