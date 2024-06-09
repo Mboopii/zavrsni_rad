@@ -4,9 +4,8 @@ FROM python:3.8-slim
 # Install dependencies
 RUN apt-get update && apt-get install -y \
   wget \
+  curl \
   gnupg \
-  gnupg2 \
-  gnupg1 \
   unzip \
   xvfb \
   libxi6 \
