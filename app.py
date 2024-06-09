@@ -14,6 +14,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.service import Service
 from google.oauth2.service_account import Credentials
 from pdf import pdf_bp
+import os
 
 creds = Credentials.from_service_account_file('api_keys/drive.json')
 app = Flask(__name__)
@@ -143,4 +144,4 @@ def index():
     return render_template('index.html')
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
