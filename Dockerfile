@@ -17,6 +17,7 @@ WORKDIR /app
 
 # Install Python dependencies
 RUN pip install -r requirements.txt
+RUN pip install gunicorn
 
-# Run the application
-CMD ["flask", "run", "--host=0.0.0.0"]
+# Run the application with Gunicorn
+CMD ["gunicorn", "-b", "0.0.0.0:5000", "app:app", "--workers=3", "--threads=2"]

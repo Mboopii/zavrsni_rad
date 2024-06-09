@@ -174,5 +174,6 @@ def check_status(request_id):
         return jsonify({'status': 'unknown'}), 404
 
 if __name__ == '__main__':
-    from werkzeug.serving import run_simple
-    run_simple('0.0.0.0', int(os.environ.get('PORT', 5000)), app, use_reloader=True, use_debugger=True)
+    # from werkzeug.serving import run_simple
+    # run_simple('0.0.0.0', int(os.environ.get('PORT', 5000)), app, use_reloader=True, use_debugger=True)
+    pass
