@@ -12,16 +12,17 @@ RUN apt-get update && apt-get install -y \
   libgconf-2-4 \
   && rm -rf /var/lib/apt/lists/*
 
-# Add Google signing key and install Chrome
-RUN wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | apt-key add - \
-  && echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list \
-  && apt-get update \
-  && apt-get install -y google-chrome-stable=114.0.5735.198-1 \
-  && apt-mark hold google-chrome-stable
+# Add Google signing key
+RUN wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | apt-key add -
 
-# Install ChromeDriver
-RUN CHROMEDRIVER_VERSION=114.0.5735.90 \
-  && wget -O /tmp/chromedriver.zip https://chromedriver.storage.googleapis.com/$CHROMEDRIVER_VERSION/chromedriver_linux64.zip \
+# Manually install the specific version of Google Chrome
+RUN wget -O /tmp/google-chrome-stable_current_amd64.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb \
+  && dpkg -i /tmp/google-chrome-stable_current_amd64.deb || apt-get -fy install \
+  && rm /tmp/google-chrome-stable_current_amd64.deb
+
+# Install ChromeDriver 115
+RUN CHROMEDRIVER_VERSION=115.0.5790.102 \
+  && wget -O /tmp/chromedriver.zip https://storage.googleapis.com/chrome-for-testing-public/$CHROMEDRIVER_VERSION/linux64/chromedriver-linux64.zip \
   && unzip /tmp/chromedriver.zip chromedriver -d /usr/local/bin/ \
   && rm /tmp/chromedriver.zip
 
