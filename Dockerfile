@@ -16,7 +16,11 @@ RUN apt-get update && apt-get install -y \
 RUN wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
   && echo "deb http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google-chrome.list \
   && apt-get update \
-  && apt-get install -y google-chrome-stable=114.0.5735.198-1
+  && apt-get install -y google-chrome-stable
+
+# Install specific version of Chrome manually
+RUN wget -q -O /tmp/google-chrome-stable_114.0.5735.198-1_amd64.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb \
+  && dpkg -i /tmp/google-chrome-stable_114.0.5735.198-1_amd64.deb || apt-get -fy install
 
 # Install ChromeDriver (specify the version that matches Chrome)
 RUN CHROMEDRIVER_VERSION=114.0.5735.90 \
