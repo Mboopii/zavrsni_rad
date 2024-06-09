@@ -56,7 +56,9 @@ def prijava(korisnicko_ime, lozinka, stranica):
 
         password_field.send_keys(Keys.RETURN)
 
-        time.sleep(3)
+        WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, '[data-ng-controller="HomeController"]'))
+        )
         
     elif stranica == 'vio':
         login_url = 'https://www.vio.hr/mojvio/'
@@ -70,8 +72,9 @@ def prijava(korisnicko_ime, lozinka, stranica):
         
         password_field.send_keys(Keys.RETURN)
         
-        driver.get('https://www.vio.hr/mojvio/?v=uplate')
-        time.sleep(1)
+        WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, '[data-ng-controller="PaymentsController"]'))
+        )
         
     elif stranica == 'gpz':
         login_url = 'https://mojracun.gpz-opskrba.hr/login.aspx'
@@ -85,6 +88,10 @@ def prijava(korisnicko_ime, lozinka, stranica):
         
         password_field.send_keys(Keys.RETURN)
         
+        WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.ID, 'ctl00_ContentPlaceHolder1_lblUser'))
+        )
+        
     elif stranica == 'a1':
         login_url = 'https://moj.a1.hr/prijava'
         driver.get(login_url)
@@ -97,6 +104,9 @@ def prijava(korisnicko_ime, lozinka, stranica):
         password_field.send_keys(lozinka)
         login_button.click()
 
+        WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, '.postpaid-overview'))
+        )
         driver.get('https://moj.a1.hr/postpaid/residential/pregled-racuna')
 
     return driver
@@ -131,7 +141,8 @@ def index():
                 worksheet = spreadsheet.worksheet(stranica)
 
                 if worksheet is None:
-                    return {'result': f'Error: Worksheet "{stranica}" not found or created.'}
+                    print(f'Error: Worksheet "{stranica}" not found or created.')
+                    return
 
                 if stranica == 'vio':
                     dohvati_podatke_vio(driver, worksheet)
@@ -143,25 +154,14 @@ def index():
                     dohvati_podatke_a1(driver, worksheet)
                         
                 driver.quit()
-                return {'result': f'Podatci uspješno upisani u Google Sheets - Worksheet: {stranica}', 'success': True}
-
+                print(f'Podatci uspješno upisani u Google Sheets - Worksheet: {stranica}')
             except Exception as e:
-                return {'result': f'Greška pri prikupljanju podataka: {str(e)}', 'success': False}
+                print(f'Greška pri prikupljanju podataka: {str(e)}')
 
-        def handle_request():
-            result = process_request(korisnicko_ime, lozinka, stranica)
-            return result
-
-        thread = threading.Thread(target=handle_request)
+        thread = threading.Thread(target=process_request, args=(korisnicko_ime, lozinka, stranica))
         thread.start()
-        
-        thread.join()  # Ensure the main thread waits for the result
-        result = handle_request()
 
-        if result['success']:
-            return jsonify(result), 202
-        else:
-            return jsonify(result), 500
+        return jsonify({'result': f'Zahtjev je primljen. Podatci se obrađuju za Worksheet: {stranica}'}), 202
 
     return render_template('index.html')
 
