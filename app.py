@@ -14,6 +14,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.service import Service
 from google.oauth2.service_account import Credentials
 from pdf import pdf_bp
+import threading
 import os
 
 creds = Credentials.from_service_account_file('api_keys/drive.json')
@@ -113,33 +114,33 @@ def index():
         lozinka = data.get('password')
         stranica = data.get('selectedPage')
 
-        print(korisnicko_ime)
-        print(lozinka)
-        print(stranica)
+        def process_request(korisnicko_ime, lozinka, stranica):
+            driver = prijava(korisnicko_ime, lozinka, stranica)
 
-        driver = prijava(korisnicko_ime, lozinka, stranica)
+            gc = gspread.service_account(filename='api_keys/racuni.json')
+            spreadsheet = gc.open("Računi")
 
-        gc = gspread.service_account(filename='api_keys/racuni.json')
-        spreadsheet = gc.open("Računi")
+            create_worksheets(spreadsheet)
+            worksheet = spreadsheet.worksheet(stranica)
 
-        create_worksheets(spreadsheet)
-        worksheet = spreadsheet.worksheet(stranica)
+            if worksheet is None:
+                return jsonify({'result': f'Error: Worksheet "{stranica}" not found or created.'})
 
-        if worksheet is None:
-            return jsonify({'result': f'Error: Worksheet "{stranica}" not found or created.'})
+            if stranica == 'vio':
+                dohvati_podatke_vio(driver, worksheet)
+            elif stranica == 'hep':
+                dohvati_podatke_hep(driver, worksheet)
+            elif stranica == 'gpz':
+                dohvati_podatke_gpz(driver, worksheet)
+            elif stranica == 'a1':
+                dohvati_podatke_a1(driver, worksheet)
+                    
+            driver.quit()
 
-        if stranica == 'vio':
-            dohvati_podatke_vio(driver, worksheet)
-        elif stranica == 'hep':
-            dohvati_podatke_hep(driver, worksheet)
-        elif stranica == 'gpz':
-            dohvati_podatke_gpz(driver, worksheet)
-        elif stranica == 'a1':
-            dohvati_podatke_a1(driver, worksheet)
-                
-        driver.quit()
+        thread = threading.Thread(target=process_request, args=(korisnicko_ime, lozinka, stranica))
+        thread.start()
 
-        return jsonify({'result': f'Podatci uspješno upisani u Google Sheets - Worksheet: {stranica}'})
+        return jsonify({'result': f'Podatci uspješno upisani u Google Sheets - Worksheet: {stranica}'}), 202
 
     return render_template('index.html')
 
