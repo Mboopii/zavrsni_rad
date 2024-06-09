@@ -6,7 +6,6 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 import requests
 import io
-import logging
 
 # Initialize Google Drive API credentials
 scopes = ['https://www.googleapis.com/auth/drive']
@@ -15,42 +14,31 @@ parent_folder_id = "1IF4YRCjxJULLJk_lQz_TbMEjwMLrzQXZ"  # Update this with your 
 
 creds = Credentials.from_service_account_file(service_account_file, scopes=scopes)
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-
 def dohvati_podatke_a1(session, worksheet):
-    logging.info("Fetching data from A1")
     # Fetch HTML from the session
     data_url = 'https://moj.a1.hr/postpaid/residential/pregled-racuna'
     response = session.get(data_url)
-    logging.info(f"Data URL response status: {response.status_code}")
     soup = BeautifulSoup(response.content, 'html.parser')
 
     # Fetch all elements containing visible invoice data
     svi_racuni = soup.find_all('div', class_='mv-Payment g-12 g-reset g-rwd p')
-    logging.info(f"Found {len(svi_racuni)} invoices")
-
     visible_racuni = [racun for racun in svi_racuni if not is_hidden(racun)]
-    logging.info(f"Found {len(visible_racuni)} visible invoices")
 
     # Add header if the worksheet is empty
     if not worksheet.get_all_values():
         header_row = ['Datum', 'Vrsta', 'Iznos računa', 'Datum dospijeća', 'Link na PDF']
         worksheet.append_row(header_row)
-        logging.info("Header row added to worksheet")
 
     latest_date_sheet = worksheet.cell(2, 1).value
     if latest_date_sheet:
         latest_date_sheet = datetime.strptime(latest_date_sheet, "%d.%m.%Y")
         visible_racuni = [racun for racun in visible_racuni if extract_date(racun) > latest_date_sheet]
-    logging.info(f"{len(visible_racuni)} invoices after filtering by date")
 
     data_to_insert = []
     pdf_upload_threads = []
     pdf_links = {}
     for racun in visible_racuni:
         datum, vrsta, iznos_racuna, datum_dospijeca, pdf_link = extract_racun_data(racun)
-        logging.info(f"Extracted data - Datum: {datum}, Vrsta: {vrsta}, Iznos: {iznos_racuna}, Dospijeće: {datum_dospijeca}, PDF Link: {pdf_link}")
         if datum:
             data_to_insert.append([datum, vrsta, iznos_racuna, datum_dospijeca, pdf_link])
             if pdf_link:
@@ -69,12 +57,10 @@ def dohvati_podatke_a1(session, worksheet):
     
     # Sort data by date before inserting into Google Sheets
     data_to_insert.sort(key=lambda x: datetime.strptime(x[0], "%m/%Y"), reverse=True)
-    logging.info(f"Inserting {len(data_to_insert)} rows into the worksheet")
 
     # Insert all data at once
     if data_to_insert:
         worksheet.insert_rows(data_to_insert, 2, value_input_option='RAW')
-        logging.info("Data successfully inserted into the worksheet")
 
 def is_hidden(element):
     parent = element.find_parent(attrs={"class": "js-toggle-section hide"})
@@ -147,12 +133,12 @@ def upload_pdf_to_drive(session, pdf_url, datum, pdf_links):
                 fields='id, webViewLink'
             ).execute()
 
-            logging.info(f"{datum}, {pdf_filename} - Datoteka uspješno učitana.")
+            print(f"{datum}, {pdf_filename} - Datoteka uspješno učitana.")
             pdf_links[pdf_url] = file['webViewLink']  # Map original URL to Google Drive link
         except Exception as e:
-            logging.error(f"Pogreška prilikom učitavanja datoteke na Google Drive: {e}")
+            print(f"Pogreška prilikom učitavanja datoteke na Google Drive: {e}")
             pdf_links[pdf_url] = ""  # In case of error, return an empty link
     else:
-        logging.error(f"Pogreška prilikom preuzimanja PDF-a: {response.status_code}")
-        logging.error(f"URL: {pdf_url}")
+        print(f"Pogreška prilikom preuzimanja PDF-a: {response.status_code}")
+        print(f"URL: {pdf_url}")
         pdf_links[pdf_url] = ""  # In case of error, return an empty link

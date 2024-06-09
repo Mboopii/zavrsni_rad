@@ -100,6 +100,11 @@ def prijava(korisnicko_ime, lozinka, stranica):
             print(f"A1 login failed: {response.status_code}")
             return None
 
+        # Handle redirection after successful login
+        redirected_url = response.headers.get('Location')
+        if redirected_url:
+            session.get(redirected_url)  # Follow the redirect to establish the session
+
         return session
 
 def create_worksheets(spreadsheet):
@@ -179,4 +184,4 @@ def check_status(request_id):
         return jsonify({'status': 'unknown'}), 404
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+    app.run(debug=False)  # Ensure debug is False for production
