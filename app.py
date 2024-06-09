@@ -35,17 +35,20 @@ def prijava(korisnicko_ime, lozinka, stranica):
             'Content-Type': 'application/json'
         }
         response = session.post(login_url, json=login_payload, headers=headers)
+        print(f"HEP login response: {response.status_code}, {response.content}")
         if response.status_code != 200:
-            return None, None, f"HEP login failed: {response.status_code}"
+            print(f"HEP login failed: {response.status_code}")
+            return None
         
         auth_token = response.json().get('Token')
         kupac_id = response.json()['Korisnik']['Kupci'][0]['KupacId']
         if auth_token:
             session.headers.update({'Authorization': f'Bearer {auth_token}'})
         else:
-            return None, None, "HEP login failed. Check if page is under maintenance."
+            print("HEP login failed: No auth token found")
+            return None
 
-        return session, kupac_id, None
+        return session, kupac_id
 
     elif stranica == 'vio':
         login_url = 'https://www.vio.hr/mojvio/?a=login'
@@ -54,10 +57,12 @@ def prijava(korisnicko_ime, lozinka, stranica):
             'pass': lozinka
         }
         response = session.post(login_url, data=login_payload)
+        print(f"VIO login response: {response.status_code}, {response.content}")
         if response.status_code != 200:
-            return None, None, f"VIO login failed. Check if page is under maintenance."
+            print(f"VIO login failed: {response.status_code}")
+            return None
 
-        return session, None, None
+        return session
 
     elif stranica == 'gpz':
         login_url = 'https://mojracun.gpz-opskrba.hr/login.aspx'
@@ -67,10 +72,12 @@ def prijava(korisnicko_ime, lozinka, stranica):
             'password': lozinka
         }
         response = session.post(login_url, data=login_payload, allow_redirects=False)
+        print(f"GPZ login response: {response.status_code}, {response.content}")
         if response.status_code != 302:
-            return None, None, f"GPZ login failed. Check if page is under maintenance."
+            print(f"GPZ login failed: {response.status_code}")
+            return None
         
-        return session, None, None
+        return session
 
     elif stranica == 'a1':
         login_url = 'https://webauth.a1.hr/vasmpauth/ProcessLoginServlet'
@@ -85,14 +92,17 @@ def prijava(korisnicko_ime, lozinka, stranica):
             'hashpassword': 123
         }
         response = session.post(login_url, data=login_payload, allow_redirects=False)
+        print(f"A1 login response: {response.status_code}, {response.content}")
         if response.status_code != 302:
-            return None, None, f"A1 login failed. Check if page is under maintenance."
+            print(f"A1 login failed: {response.status_code}")
+            return None
 
+        # Handle redirection after successful login
         redirected_url = response.headers.get('Location')
         if redirected_url:
             session.get(redirected_url)  # Follow the redirect to establish the session
 
-        return session, None, None
+        return session
 
 def create_worksheets(spreadsheet):
     for ws_name in ["hep", "vio", "gpz", "a1"]:
@@ -102,14 +112,13 @@ def create_worksheets(spreadsheet):
 
 def process_request(korisnicko_ime, lozinka, stranica, request_id):
     try:
-        session, kupac_id, login_error = prijava(korisnicko_ime, lozinka, stranica)
-        if login_error:
-            update_status(request_id, login_error, False)
-            return
-
-        if session is None:
+        session_data = prijava(korisnicko_ime, lozinka, stranica)
+        if session_data is None:
             update_status(request_id, 'Error: Login failed.', False)
             return
+
+        session = session_data if stranica != 'hep' else session_data[0]
+        kupac_id = session_data[1] if stranica == 'hep' else None
 
         gc = gspread.service_account(filename='api_keys/racuni.json')
         spreadsheet = gc.open("Računi")
@@ -130,13 +139,10 @@ def process_request(korisnicko_ime, lozinka, stranica, request_id):
         elif stranica == 'a1':
             message, success = dohvati_podatke_a1(session, worksheet)
 
-        if not success:
-            message = message or 'Failed to retrieve invoices. The site may be undergoing maintenance.'
-        
         update_status(request_id, message, success)
 
     except Exception as e:
-        update_status(request_id, f'Login failed. Check username and password. If correct, check if page is under maintenance.', False)
+        update_status(request_id, f'Error collecting data: {str(e)}', False)
 
 def update_status(request_id, message, success):
     request_status[request_id] = {'result': message, 'success': success}
