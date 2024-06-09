@@ -33,6 +33,8 @@ def prijava(korisnicko_ime, lozinka, stranica):
     chrome_options.add_argument('--headless')
     chrome_options.add_argument('--no-sandbox')
     chrome_options.add_argument('--disable-dev-shm-usage')
+    chrome_options.add_argument('--remote-debugging-port=9222')
+    chrome_options.add_argument('--disable-gpu')
 
     service = Service(executable_path=chromedriver_path)
     driver = webdriver.Chrome(service=service, options=chrome_options)
@@ -113,6 +115,10 @@ def index():
         korisnicko_ime = data.get('email')
         lozinka = data.get('password')
         stranica = data.get('selectedPage')
+
+        print(korisnicko_ime)
+        print(lozinka)
+        print(stranica)
 
         def process_request(korisnicko_ime, lozinka, stranica):
             driver = prijava(korisnicko_ime, lozinka, stranica)
