@@ -10,11 +10,10 @@ import io
 #inicijalizacija google drive api vjerodajnica
 scopes = ['https://www.googleapis.com/auth/drive']
 service_account_file = 'api_keys/drive.json'
-parent_folder_id = "1IF4YRCjxJULLJk_lQz_TbMEjwMLrzQXZ"  # Update this with your Google Drive folder ID
 
 creds = Credentials.from_service_account_file(service_account_file, scopes=scopes)
 
-def dohvati_podatke_a1(session, worksheet):
+def dohvati_podatke_a1(session, worksheet, parent_folder_id):
     #dohvati html iz sesije
     data_url = 'https://moj.a1.hr/postpaid/residential/pregled-racuna'
     response = session.get(data_url)
@@ -51,7 +50,7 @@ def dohvati_podatke_a1(session, worksheet):
         datum, vrsta, iznos_racuna, datum_dospijeca, pdf_link = extract_racun_data(racun)
         if datum:
             if pdf_link:
-                pdf_link = upload_pdf_to_drive(session, pdf_link, datum)
+                pdf_link = upload_pdf_to_drive(session, pdf_link, datum, parent_folder_id)
             return [datum, vrsta, iznos_racuna, datum_dospijeca, pdf_link]
         return None
 
@@ -122,7 +121,7 @@ def extract_racun_data(racun):
 
     return datum, vrsta, iznos_racuna, datum_dospijeca, pdf_link
 
-def upload_pdf_to_drive(session, pdf_url, datum):
+def upload_pdf_to_drive(session, pdf_url, datum, parent_folder_id):
     response = session.get(pdf_url)
     if response.status_code == 200:
         formatted_date = datetime.strptime(datum, "%m/%Y").strftime("%Y_%m")

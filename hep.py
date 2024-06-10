@@ -10,11 +10,10 @@ import random
 #inicijalizacija google drive api vjerodajnica
 scopes = ['https://www.googleapis.com/auth/drive']
 service_account_file = 'api_keys/drive.json'
-parent_folder_id = "17WYhCuwD_HkIkmNWcJJTOvDSc0d577vE"
 
 creds = Credentials.from_service_account_file(service_account_file, scopes=scopes)
 
-def dohvati_podatke_hep(session, worksheet, kupac_id):
+def dohvati_podatke_hep(session, worksheet, kupac_id, parent_folder_id):
     #dohvati podatke s novog endpointa
     data_url = f'https://mojracun.hep.hr/elektra/api/promet/{kupac_id}'
     response = session.get(data_url)
@@ -58,7 +57,7 @@ def dohvati_podatke_hep(session, worksheet, kupac_id):
             headers = {
                 'Content-Type': 'application/json'
             }
-            pdf_link = upload_pdf_to_drive(session, pdf_url, payload, datum_formatted)
+            pdf_link = upload_pdf_to_drive(session, pdf_url, payload, datum_formatted, parent_folder_id)
 
         return [datetime.strptime(datum_racuna, "%Y-%m-%d").strftime("%d.%m.%y"), vrsta, iznos_racuna, iznos_uplate, pdf_link]
 
@@ -78,7 +77,7 @@ def dohvati_podatke_hep(session, worksheet, kupac_id):
 
     return 'No new data to insert', True
 
-def upload_pdf_to_drive(session, pdf_url, payload, datum):
+def upload_pdf_to_drive(session, pdf_url, payload, datum, parent_folder_id):
     response = session.post(pdf_url, json=payload)
 
     if response.status_code == 200:

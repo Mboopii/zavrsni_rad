@@ -9,11 +9,10 @@ import io
 
 scopes = ['https://www.googleapis.com/auth/drive']
 service_account_file = 'api_keys/drive.json'
-parent_folder_id = "1THhhwZKmJwFgtT6owYaEB7c1K31PANnU"
 
 creds = Credentials.from_service_account_file(service_account_file, scopes=scopes)
 
-def dohvati_podatke_vio(session, worksheet):
+def dohvati_podatke_vio(session, worksheet, parent_folder_id):
     # Fetch HTML from the session
     response = session.get('https://www.vio.hr/mojvio/?v=uplate')
     soup = BeautifulSoup(response.content, 'html.parser')
@@ -42,7 +41,7 @@ def dohvati_podatke_vio(session, worksheet):
         if datum:
             data_to_insert.append([datum, datum_dospijeca, vrsta, iznos_racuna, iznos_uplate, pdf_link])
             if vrsta == 'Racun' and pdf_link:
-                thread = threading.Thread(target=upload_pdf_to_drive, args=(pdf_link, datum, pdf_links))
+                thread = threading.Thread(target=upload_pdf_to_drive, args=(pdf_link, datum, pdf_links, parent_folder_id))
                 pdf_upload_threads.append(thread)
                 thread.start()
     
@@ -81,7 +80,7 @@ def extract_racun_data(racun):
 
     return datum, datum_dospijeca, vrsta, iznos_racuna, iznos_uplate, pdf_link
 
-def upload_pdf_to_drive(pdf_url, datum, pdf_links):
+def upload_pdf_to_drive(pdf_url, datum, pdf_links, parent_folder_id):
     formatted_date = datetime.strptime(datum, "%d.%m.%Y").strftime("%Y_%m_%d")
     pdf_filename = f"Racun_{formatted_date}.pdf"
     response = requests.get(pdf_url)

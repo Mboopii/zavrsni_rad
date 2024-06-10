@@ -8,6 +8,7 @@ from gpz import dohvati_podatke_gpz
 from a1 import dohvati_podatke_a1
 from google.oauth2.service_account import Credentials
 from pdf import pdf_bp
+import threading
 import os
 import uuid
 import requests
@@ -21,6 +22,7 @@ CORS(app, supports_credentials=True)
 app.register_blueprint(pdf_bp, url_prefix='/pdf')
 
 request_status = {}
+request_lock = threading.Lock()
 
 def prijava(korisnicko_ime, lozinka, stranica):
     session = requests.Session()
@@ -145,7 +147,8 @@ def process_request(korisnicko_ime, lozinka, stranica, sheet_url, drive_folder_i
         update_status(request_id, 'Error collecting data: {}'.format(str(e)), False)
 
 def update_status(request_id, message, success):
-    request_status[request_id] = {'result': message, 'success': success}
+    with request_lock:
+        request_status[request_id] = {'result': message, 'success': success}
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
@@ -163,7 +166,9 @@ def index():
         request_id = str(uuid.uuid4())
         update_status(request_id, 'Request received and being processed.', None)
 
-        process_request(korisnicko_ime, lozinka, stranica, sheet_url, drive_folder_id_hep, drive_folder_id_vio, drive_folder_id_a1, request_id)
+        thread = threading.Thread(target=process_request, args=(
+            korisnicko_ime, lozinka, stranica, sheet_url, drive_folder_id_hep, drive_folder_id_vio, drive_folder_id_a1, request_id))
+        thread.start()
 
         return jsonify({'result': 'Zahtjev je primljen. Podatci se obrađuju za Worksheet: {}'.format(stranica), 'request_id': request_id}), 202
 
@@ -171,7 +176,8 @@ def index():
 
 @app.route('/status/<request_id>', methods=['GET'])
 def check_status(request_id):
-    status = request_status.get(request_id, None)
+    with request_lock:
+        status = request_status.get(request_id, None)
     if status:
         return jsonify(status), 200
     else:
