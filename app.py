@@ -111,10 +111,25 @@ def create_worksheets(spreadsheet):
     for ws_name in ["hep", "vio", "gpz", "a1"]:
         if ws_name not in [ws.title for ws in spreadsheet.worksheets()]:
             spreadsheet.add_worksheet(title=ws_name, rows="100", cols="100")
-            print(f"Worksheet '{ws_name}' izrađen.")
+            print(f"Worksheet '{ws_name}' created.")
+
+def update_status(request_id, message, success):
+    with request_lock:
+        request_status[request_id] = {'result': message, 'success': success}
+    print(f"Update status for request {request_id}: {message} (success: {success})")
 
 def process_request(korisnicko_ime, lozinka, stranica, sheet_url, drive_folder_id_hep, drive_folder_id_vio, drive_folder_id_a1, request_id):
     try:
+        # Debugging ispisi
+        print(f"Received request with parameters:\n"
+              f"Email: {korisnicko_ime}\n"
+              f"Password: {lozinka}\n"
+              f"Selected Page: {stranica}\n"
+              f"Google Sheets URL: {sheet_url}\n"
+              f"Drive Folder ID HEP: {drive_folder_id_hep}\n"
+              f"Drive Folder ID VIO: {drive_folder_id_vio}\n"
+              f"Drive Folder ID A1: {drive_folder_id_a1}\n")
+
         session_data = prijava(korisnicko_ime, lozinka, stranica)
         if session_data is None:
             update_status(request_id, 'Error: Login failed.', False)
@@ -123,32 +138,54 @@ def process_request(korisnicko_ime, lozinka, stranica, sheet_url, drive_folder_i
         session = session_data if stranica != 'hep' else session_data[0]
         kupac_id = session_data[1] if stranica == 'hep' else None
 
+        # Debugging ispis za Google Sheets
+        print(f"Opening Google Sheets: {sheet_url}")
         gc = gspread.service_account(filename='api_keys/racuni.json')
-        spreadsheet = gc.open_by_url(sheet_url)
+        try:
+            spreadsheet = gc.open_by_url(sheet_url)
+        except Exception as e:
+            print(f"Error opening Google Sheets: {str(e)}")
+            update_status(request_id, f"Error opening Google Sheets: {str(e)}", False)
+            return
+        
+        print(f"Google Sheets opened successfully: {spreadsheet.title}")
+        
         create_worksheets(spreadsheet)
-        worksheet = spreadsheet.worksheet(stranica)
+        
+        try:
+            worksheet = spreadsheet.worksheet(stranica)
+        except Exception as e:
+            print(f"Error opening worksheet: {str(e)}")
+            update_status(request_id, f"Error opening worksheet: {str(e)}", False)
+            return
+        
+        print(f"Opened worksheet: {worksheet.title}")
 
         if worksheet is None:
             update_status(request_id, 'Error: Worksheet "{}" not found or created.'.format(stranica), False)
             return
 
         if stranica == 'vio':
-            dohvati_podatke_vio(session, worksheet, drive_folder_id_vio)
+            print(f"Fetching VIO data with Drive Folder ID: {drive_folder_id_vio}")
+            result, success = dohvati_podatke_vio(session, worksheet, drive_folder_id_vio)
         elif stranica == 'hep':
-            dohvati_podatke_hep(session, worksheet, kupac_id, drive_folder_id_hep)
+            print(f"Fetching HEP data with Drive Folder ID: {drive_folder_id_hep}")
+            result, success = dohvati_podatke_hep(session, worksheet, kupac_id, drive_folder_id_hep)
         elif stranica == 'gpz':
-            dohvati_podatke_gpz(session, worksheet)
+            print(f"Fetching GPZ data")
+            result, success = dohvati_podatke_gpz(session, worksheet)
         elif stranica == 'a1':
-            dohvati_podatke_a1(session, worksheet, drive_folder_id_a1)
+            print(f"Fetching A1 data with Drive Folder ID: {drive_folder_id_a1}")
+            result, success = dohvati_podatke_a1(session, worksheet, drive_folder_id_a1)
 
-        update_status(request_id, 'Data successfully written to Google Sheets - Worksheet: {}'.format(stranica), True)
+        if not success:
+            update_status(request_id, result, False)
+        else:
+            update_status(request_id, 'Data successfully written to Google Sheets - Worksheet: {}'.format(stranica), True)
 
     except Exception as e:
+        print(f"Error in process_request: {str(e)}")
         update_status(request_id, 'Error collecting data: {}'.format(str(e)), False)
-
-def update_status(request_id, message, success):
-    with request_lock:
-        request_status[request_id] = {'result': message, 'success': success}
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
