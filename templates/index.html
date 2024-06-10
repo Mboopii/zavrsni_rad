@@ -27,67 +27,72 @@
 
               <div class="form-group">
                 <label for="page">Odaberite stranicu:</label>
-                <select class="form-control" id="page" name="page">
+                <select class="form-control" id="page" name="page" onchange="toggleDriveFolderId()">
+                  <option value="" disabled selected>Select Page</option>
                   <option value="hep">HEP</option>
                   <option value="vio">VIO</option>
                   <option value="gpz">GPZ</option>
                   <option value="a1">A1</option>
                 </select>
               </div>
+
+              <div class="form-group" id="sheetUrlContainer">
+                <label for="sheetUrl">Google Sheets URL:</label>
+                <input type="url" class="form-control" id="sheetUrl" name="sheetUrl" required>
+              </div>
+
+              <div class="form-group" id="driveFolderIdHepContainer" style="display: none;">
+                <label for="driveFolderIdHep">Google Drive Folder ID for HEP:</label>
+                <input type="text" class="form-control" id="driveFolderIdHep" name="driveFolderIdHep">
+              </div>
+
+              <div class="form-group" id="driveFolderIdVioContainer" style="display: none;">
+                <label for="driveFolderIdVio">Google Drive Folder ID for VIO:</label>
+                <input type="text" class="form-control" id="driveFolderIdVio" name="driveFolderIdVio">
+              </div>
+
+              <div class="form-group" id="driveFolderIdA1Container" style="display: none;">
+                <label for="driveFolderIdA1">Google Drive Folder ID for A1:</label>
+                <input type="text" class="form-control" id="driveFolderIdA1" name="driveFolderIdA1">
+              </div>
+
               <button type="submit" class="btn btn-primary btn-block">Izlistaj račune u Google Sheets</button>
             </form>
             <div id="result" class="mt-3 text-center"></div>
           </div>
         </div>
       </div>
+      
       <div class="col-md-6 mb-4">
         <div class="card">
           <div class="card-body">
-            <h2 class="card-title text-center">Unos očitanja brojila</h2>
-            <form id="meterForm" enctype="multipart/form-data">
+            <h2 class="card-title text-center">Upload Invoice PDF</h2>
+            <form id="pdfForm" enctype="multipart/form-data">
               <div class="form-group">
-                <label for="meter-reading">Stanje brojila:</label>
-                <input type="text" class="form-control" id="meter-reading" name="meter-reading" required>
+                <label for="invoiceType">Invoice Type:</label>
+                <select class="form-control" id="invoiceType" name="invoice_type" required>
+                  <option value="" disabled selected>Select Invoice Type</option>
+                  <option value="hep">HEP</option>
+                  <option value="vio">VIO</option>
+                  <option value="a1">A1</option>
+                </select>
               </div>
-              
               <div class="form-group">
-                <label for="meter-image">Slika brojila:</label>
-                <input type="file" class="form-control-file" id="meter-image" name="meter-image" accept="image/*" required>
+                <label for="pdfFile">PDF File:</label>
+                <input type="file" class="form-control-file" id="pdfFile" name="file" accept="application/pdf" required>
               </div>
-              <button type="submit" class="btn btn-primary btn-block">Pošalji očitanje</button>
+              <button type="submit" class="btn btn-primary btn-block">Upload and Extract</button>
             </form>
-            <div id="meter-result" class="mt-3 text-center"></div>
+            <div id="pdf-result" class="mt-3"></div>
           </div>
         </div>
-      </div>
-    </div>
-    <div class="row">
-      <div class="col-12 text-center">
-        <h2>Upload Invoice PDF</h2>
-        <form id="pdfForm" enctype="multipart/form-data">
-          <div class="form-group">
-            <label for="invoiceType">Invoice Type:</label>
-            <select class="form-control" id="invoiceType" name="invoice_type" required>
-              <option value="" disabled selected>Select Invoice Type</option>
-              <option value="hep">HEP</option>
-              <option value="vio">VIO</option>
-              <option value="a1">A1</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label for="pdfFile">PDF File:</label>
-            <input type="file" class="form-control-file" id="pdfFile" name="file" accept="application/pdf" required>
-          </div>
-          <button type="submit" class="btn btn-primary btn-block">Upload and Extract</button>
-        </form>
-        <div id="pdf-result" class="mt-3"></div>
       </div>
     </div>
     <div id="loader" class="loader" style="display: none;"></div>
     <div class="loader-background" style="display: none;"></div>
   </div>
   <script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
-  <script src="{{ url_for('static', filename='scripts/script.js') }}"></script>
+  <script src="{{ url_for('static', filename='scripts/local_script.js') }}"></script>
   <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
 </body>
 </html>
