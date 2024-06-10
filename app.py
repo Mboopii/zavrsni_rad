@@ -8,7 +8,6 @@ from gpz import dohvati_podatke_gpz
 from a1 import dohvati_podatke_a1
 from google.oauth2.service_account import Credentials
 from pdf import pdf_bp
-import threading
 import os
 import uuid
 import requests
@@ -22,7 +21,6 @@ CORS(app, supports_credentials=True)
 app.register_blueprint(pdf_bp, url_prefix='/pdf')
 
 request_status = {}
-request_lock = threading.Lock()
 
 def prijava(korisnicko_ime, lozinka, stranica):
     session = requests.Session()
@@ -113,7 +111,7 @@ def create_worksheets(spreadsheet):
             spreadsheet.add_worksheet(title=ws_name, rows="100", cols="100")
             print(f"Worksheet '{ws_name}' izrađen.")
 
-def process_request(korisnicko_ime, lozinka, stranica, request_id):
+def process_request(korisnicko_ime, lozinka, stranica, sheet_url, drive_folder_id_hep, drive_folder_id_vio, drive_folder_id_a1, request_id):
     try:
         session_data = prijava(korisnicko_ime, lozinka, stranica)
         if session_data is None:
@@ -124,8 +122,7 @@ def process_request(korisnicko_ime, lozinka, stranica, request_id):
         kupac_id = session_data[1] if stranica == 'hep' else None
 
         gc = gspread.service_account(filename='api_keys/racuni.json')
-        spreadsheet = gc.open("Računi")
-
+        spreadsheet = gc.open_by_url(sheet_url)
         create_worksheets(spreadsheet)
         worksheet = spreadsheet.worksheet(stranica)
 
@@ -134,13 +131,13 @@ def process_request(korisnicko_ime, lozinka, stranica, request_id):
             return
 
         if stranica == 'vio':
-            dohvati_podatke_vio(session, worksheet)
+            dohvati_podatke_vio(session, worksheet, drive_folder_id_vio)
         elif stranica == 'hep':
-            dohvati_podatke_hep(session, worksheet, kupac_id)
+            dohvati_podatke_hep(session, worksheet, kupac_id, drive_folder_id_hep)
         elif stranica == 'gpz':
             dohvati_podatke_gpz(session, worksheet)
         elif stranica == 'a1':
-            dohvati_podatke_a1(session, worksheet)
+            dohvati_podatke_a1(session, worksheet, drive_folder_id_a1)
 
         update_status(request_id, 'Data successfully written to Google Sheets - Worksheet: {}'.format(stranica), True)
 
@@ -148,8 +145,7 @@ def process_request(korisnicko_ime, lozinka, stranica, request_id):
         update_status(request_id, 'Error collecting data: {}'.format(str(e)), False)
 
 def update_status(request_id, message, success):
-    with request_lock:
-        request_status[request_id] = {'result': message, 'success': success}
+    request_status[request_id] = {'result': message, 'success': success}
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
@@ -159,12 +155,15 @@ def index():
         korisnicko_ime = data.get('email')
         lozinka = data.get('password')
         stranica = data.get('selectedPage')
+        sheet_url = data.get('sheetUrl')
+        drive_folder_id_hep = data.get('driveFolderIdHep')
+        drive_folder_id_vio = data.get('driveFolderIdVio')
+        drive_folder_id_a1 = data.get('driveFolderIdA1')
 
         request_id = str(uuid.uuid4())
         update_status(request_id, 'Request received and being processed.', None)
 
-        thread = threading.Thread(target=process_request, args=(korisnicko_ime, lozinka, stranica, request_id))
-        thread.start()
+        process_request(korisnicko_ime, lozinka, stranica, sheet_url, drive_folder_id_hep, drive_folder_id_vio, drive_folder_id_a1, request_id)
 
         return jsonify({'result': 'Zahtjev je primljen. Podatci se obrađuju za Worksheet: {}'.format(stranica), 'request_id': request_id}), 202
 
@@ -172,8 +171,7 @@ def index():
 
 @app.route('/status/<request_id>', methods=['GET'])
 def check_status(request_id):
-    with request_lock:
-        status = request_status.get(request_id, None)
+    status = request_status.get(request_id, None)
     if status:
         return jsonify(status), 200
     else:

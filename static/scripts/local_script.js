@@ -4,6 +4,10 @@ async function submitForm(event) {
     const email = document.getElementById('email').value;
     const password = document.getElementById('password').value;
     const selectedPage = document.getElementById('page').value;
+    const sheetUrl = document.getElementById('sheetUrl').value;
+    const driveFolderIdHep = document.getElementById('driveFolderIdHep').value;
+    const driveFolderIdVio = document.getElementById('driveFolderIdVio').value;
+    const driveFolderIdA1 = document.getElementById('driveFolderIdA1').value;
 
     document.getElementById('loader').style.display = 'block';
     document.querySelector('.loader-background').style.display = 'block';
@@ -14,7 +18,15 @@ async function submitForm(event) {
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ email, password, selectedPage }),
+            body: JSON.stringify({
+                email,
+                password,
+                selectedPage,
+                sheetUrl,
+                driveFolderIdHep,
+                driveFolderIdVio,
+                driveFolderIdA1
+            }),
         });
 
         if (response.ok) {
@@ -33,7 +45,7 @@ async function submitForm(event) {
                         document.querySelector('.loader-background').style.display = 'none';
                     }
                 }
-            }, 2000); // Check status every 2 seconds
+            }, 2000);
         } else {
             document.getElementById('result').innerText = 'Greška pri prikupljanju podataka.';
             document.getElementById('loader').style.display = 'none';
@@ -47,55 +59,11 @@ async function submitForm(event) {
     }
 }
 
-async function checkStatus(requestId) {
-    let status = 'processing';
-    while (status === 'processing') {
-        const response = await fetch(`http://127.0.0.1:5000/status/${requestId}`);
-        const data = await response.json();
-        status = data.status;
-
-        if (status === 'completed') {
-            document.getElementById('result').innerText = 'Podatci uspješno upisani u Google Sheets.';
-        } else if (status === 'error') {
-            document.getElementById('result').innerText = 'Greška pri prikupljanju podataka.';
-        }
-
-        await new Promise(resolve => setTimeout(resolve, 1000)); // wait for 1 second before next poll
-    }
-}
-
-document.addEventListener('DOMContentLoaded', () => {
-    document.getElementById('loginForm').addEventListener('submit', submitForm);
-});
-
-async function submitMeterForm(event) {
-    event.preventDefault();
-
-    const form = document.getElementById('meterForm');
-    const formData = new FormData(form);
-
-    document.getElementById('loader').style.display = 'block';
-    document.querySelector('.loader-background').style.display = 'block';
-
-    try {
-        const response = await fetch('http://127.0.0.1:5000/submit-meter-reading', {
-            method: 'POST',
-            body: formData,
-        });
-
-        if (response.ok) {
-            const data = await response.json();
-            document.getElementById('meter-result').innerText = data.message;
-        } else {
-            document.getElementById('meter-result').innerText = 'Greška pri slanju očitanja brojila.';
-        }
-    } catch (error) {
-        console.error("Greška: ", error);
-        document.getElementById('meter-result').innerText = 'Greška pri slanju očitanja brojila.';
-    } finally {
-        document.getElementById('loader').style.display = 'none';
-        document.querySelector('.loader-background').style.display = 'none';
-    }
+function toggleDriveFolderId() {
+    const page = document.getElementById('page').value;
+    document.getElementById('driveFolderIdHepContainer').style.display = page === 'hep' ? 'block' : 'none';
+    document.getElementById('driveFolderIdVioContainer').style.display = page === 'vio' ? 'block' : 'none';
+    document.getElementById('driveFolderIdA1Container').style.display = page === 'a1' ? 'block' : 'none';
 }
 
 async function submitPdfForm(event) {
@@ -103,9 +71,6 @@ async function submitPdfForm(event) {
 
     const form = document.getElementById('pdfForm');
     const formData = new FormData(form);
-
-    const invoiceType = document.getElementById('invoiceType').value;
-    formData.append('invoice_type', invoiceType);
 
     document.getElementById('loader').style.display = 'block';
     document.querySelector('.loader-background').style.display = 'block';
@@ -164,6 +129,6 @@ async function submitPdfForm(event) {
 
 document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('loginForm').addEventListener('submit', submitForm);
-    document.getElementById('meterForm').addEventListener('submit', submitMeterForm);
     document.getElementById('pdfForm').addEventListener('submit', submitPdfForm);
+    document.getElementById('page').addEventListener('change', toggleDriveFolderId);
 });
