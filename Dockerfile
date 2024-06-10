@@ -1,23 +1,23 @@
-# Use an official Python runtime as a parent image
-FROM python:3.10-slim
+#koristi službeni Python runtime kao parent image
+FROM python:3.12-slim
 
-# Set the working directory in the container
+#postavi radni direktorij u kontejneru
 WORKDIR /app
 
-# Copy the requirements.txt file first to leverage Docker cache
+#kopiraj requirements.txt datoteku prvo kako bi iskoristio Docker cache
 COPY requirements.txt /app/requirements.txt
 
-# Install any needed packages specified in requirements.txt
+#instaliraj potrebne pakete specificirane u requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the current directory contents into the container at /app
+#kopiraj trenutni direktorij sadržaja u kontejner na /app
 COPY . /app
 
-# Make port 5000 available to the world outside this container
+#omogući port 5000 za svijet izvan ovog kontejnera
 EXPOSE 5000
 
-# Define environment variable
+#definiraj varijablu okruženja
 ENV NAME World
 
-# Run app.py when the container launches
+#pokreni app.py kada se kontejner pokrene
 CMD ["gunicorn", "-w", "4", "-b", "0.0.0.0:5000", "--threads", "2", "app:app"]
