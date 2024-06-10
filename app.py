@@ -1,7 +1,7 @@
 import gspread
-import time
 from flask import Flask, render_template, request, jsonify
 from flask_cors import CORS
+from upload import extract_drive_id
 from hep import dohvati_podatke_hep
 from vio import dohvati_podatke_vio
 from gpz import dohvati_podatke_gpz
@@ -9,21 +9,20 @@ from a1 import dohvati_podatke_a1
 from google.oauth2.service_account import Credentials
 from pdf import pdf_bp
 import threading
-import os
-import uuid
 import requests
-from bs4 import BeautifulSoup
 
+#učitavanje vjerodajnica za Google API
 creds = Credentials.from_service_account_file('api_keys/drive.json')
+
 app = Flask(__name__)
 CORS(app, supports_credentials=True)
 
-# Register the PDF blueprint
+#registracija PDF blueprint-a
 app.register_blueprint(pdf_bp, url_prefix='/pdf')
 
-request_status = {}
 request_lock = threading.Lock()
 
+#funkcija za prijavu na različite stranice
 def prijava(korisnicko_ime, lozinka, stranica):
     session = requests.Session()
 
@@ -38,9 +37,7 @@ def prijava(korisnicko_ime, lozinka, stranica):
             'Content-Type': 'application/json'
         }
         response = session.post(login_url, json=login_payload, headers=headers)
-        print(f"HEP login response: {response.status_code}, {response.content}")
         if response.status_code != 200:
-            print(f"HEP login failed: {response.status_code}")
             return None
         
         auth_token = response.json().get('Token')
@@ -48,7 +45,6 @@ def prijava(korisnicko_ime, lozinka, stranica):
         if auth_token:
             session.headers.update({'Authorization': f'Bearer {auth_token}'})
         else:
-            print("HEP login failed: No auth token found")
             return None
 
         return session, kupac_id
@@ -60,9 +56,7 @@ def prijava(korisnicko_ime, lozinka, stranica):
             'pass': lozinka
         }
         response = session.post(login_url, data=login_payload)
-        print(f"VIO login response: {response.status_code}, {response.content}")
         if response.status_code != 200:
-            print(f"VIO login failed: {response.status_code}")
             return None
 
         return session
@@ -75,9 +69,7 @@ def prijava(korisnicko_ime, lozinka, stranica):
             'password': lozinka
         }
         response = session.post(login_url, data=login_payload, allow_redirects=False)
-        print(f"GPZ login response: {response.status_code}, {response.content}")
         if response.status_code != 302:
-            print(f"GPZ login failed: {response.status_code}")
             return None
         
         return session
@@ -95,97 +87,64 @@ def prijava(korisnicko_ime, lozinka, stranica):
             'hashpassword': 123
         }
         response = session.post(login_url, data=login_payload, allow_redirects=False)
-        print(f"A1 login response: {response.status_code}, {response.content}")
         if response.status_code != 302:
-            print(f"A1 login failed: {response.status_code}")
             return None
 
-        # Handle redirection after successful login
+        #rukovanje preusmjeravanjem nakon uspješne prijave
         redirected_url = response.headers.get('Location')
         if redirected_url:
-            session.get(redirected_url)  # Follow the redirect to establish the session
+            session.get(redirected_url)  #prati preusmjeravanje kako bi se uspostavila sesija
 
         return session
 
+#funkcija za kreiranje radnih listova u Google Sheets
 def create_worksheets(spreadsheet):
     for ws_name in ["hep", "vio", "gpz", "a1"]:
         if ws_name not in [ws.title for ws in spreadsheet.worksheets()]:
             spreadsheet.add_worksheet(title=ws_name, rows="100", cols="100")
-            print(f"Worksheet '{ws_name}' created.")
 
-def update_status(request_id, message, success):
-    with request_lock:
-        request_status[request_id] = {'result': message, 'success': success}
-    print(f"Update status for request {request_id}: {message} (success: {success})")
-
-def process_request(korisnicko_ime, lozinka, stranica, sheet_url, drive_folder_id_hep, drive_folder_id_vio, drive_folder_id_a1, request_id):
+#funkcija za obradu zahtjeva
+def process_request(korisnicko_ime, lozinka, stranica, sheet_url, drive_url_hep, drive_url_vio, drive_url_a1):
     try:
-        # Debugging ispisi
-        print(f"Received request with parameters:\n"
-              f"Email: {korisnicko_ime}\n"
-              f"Password: {lozinka}\n"
-              f"Selected Page: {stranica}\n"
-              f"Google Sheets URL: {sheet_url}\n"
-              f"Drive Folder ID HEP: {drive_folder_id_hep}\n"
-              f"Drive Folder ID VIO: {drive_folder_id_vio}\n"
-              f"Drive Folder ID A1: {drive_folder_id_a1}\n")
-
+        #prijava na odabranu stranicu
         session_data = prijava(korisnicko_ime, lozinka, stranica)
         if session_data is None:
-            update_status(request_id, 'Error: Login failed.', False)
-            return
+            return 'Greška: Prijava nije uspjela.', False
 
         session = session_data if stranica != 'hep' else session_data[0]
         kupac_id = session_data[1] if stranica == 'hep' else None
 
-        # Debugging ispis za Google Sheets
-        print(f"Opening Google Sheets: {sheet_url}")
+        #ispis za debugiranje Google Sheets
         gc = gspread.service_account(filename='api_keys/racuni.json')
         try:
             spreadsheet = gc.open_by_url(sheet_url)
         except Exception as e:
-            print(f"Error opening Google Sheets: {str(e)}")
-            update_status(request_id, f"Error opening Google Sheets: {str(e)}", False)
-            return
-        
-        print(f"Google Sheets opened successfully: {spreadsheet.title}")
-        
+            return f"Greška pri otvaranju Google Sheets", False
+                
         create_worksheets(spreadsheet)
         
         try:
             worksheet = spreadsheet.worksheet(stranica)
         except Exception as e:
-            print(f"Error opening worksheet: {str(e)}")
-            update_status(request_id, f"Error opening worksheet: {str(e)}", False)
-            return
+            return f"Greška pri otvaranju radnog lista", False
         
-        print(f"Opened worksheet: {worksheet.title}")
-
         if worksheet is None:
-            update_status(request_id, 'Error: Worksheet "{}" not found or created.'.format(stranica), False)
-            return
+            return 'Greška: Radni list "{}" nije pronađen ili kreiran.'.format(stranica), False
 
+        #dohvati podatke ovisno o odabranoj stranici
         if stranica == 'vio':
-            print(f"Fetching VIO data with Drive Folder ID: {drive_folder_id_vio}")
-            result, success = dohvati_podatke_vio(session, worksheet, drive_folder_id_vio)
+            result, success = dohvati_podatke_vio(session, worksheet, extract_drive_id(drive_url_vio))
         elif stranica == 'hep':
-            print(f"Fetching HEP data with Drive Folder ID: {drive_folder_id_hep}")
-            result, success = dohvati_podatke_hep(session, worksheet, kupac_id, drive_folder_id_hep)
+            result, success = dohvati_podatke_hep(session, worksheet, kupac_id, extract_drive_id(drive_url_hep))
         elif stranica == 'gpz':
-            print(f"Fetching GPZ data")
             result, success = dohvati_podatke_gpz(session, worksheet)
         elif stranica == 'a1':
-            print(f"Fetching A1 data with Drive Folder ID: {drive_folder_id_a1}")
-            result, success = dohvati_podatke_a1(session, worksheet, drive_folder_id_a1)
+            result, success = dohvati_podatke_a1(session, worksheet, extract_drive_id(drive_url_a1))
 
-        if not success:
-            update_status(request_id, result, False)
-        else:
-            update_status(request_id, 'Data successfully written to Google Sheets - Worksheet: {}'.format(stranica), True)
+        return result, success
 
     except Exception as e:
-        print(f"Error in process_request: {str(e)}")
-        update_status(request_id, 'Error collecting data: {}'.format(str(e)), False)
+        return f'Greška pri prikupljanju podataka.', False
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
@@ -196,29 +155,19 @@ def index():
         lozinka = data.get('password')
         stranica = data.get('selectedPage')
         sheet_url = data.get('sheetUrl')
-        drive_folder_id_hep = data.get('driveFolderIdHep')
-        drive_folder_id_vio = data.get('driveFolderIdVio')
-        drive_folder_id_a1 = data.get('driveFolderIdA1')
+        drive_url_hep = data.get('driveFolderIdHep')
+        drive_url_vio = data.get('driveFolderIdVio')
+        drive_url_a1 = data.get('driveFolderIdA1')
 
-        request_id = str(uuid.uuid4())
-        update_status(request_id, 'Request received and being processed.', None)
-
-        thread = threading.Thread(target=process_request, args=(
-            korisnicko_ime, lozinka, stranica, sheet_url, drive_folder_id_hep, drive_folder_id_vio, drive_folder_id_a1, request_id))
-        thread.start()
-
-        return jsonify({'result': 'Zahtjev je primljen. Podatci se obrađuju za Worksheet: {}'.format(stranica), 'request_id': request_id}), 202
+        #izravno procesiranje zahtjeva
+        result, success = process_request(korisnicko_ime, lozinka, stranica, sheet_url, drive_url_hep, drive_url_vio, drive_url_a1)
+        
+        if success:
+            return jsonify({'result': result, 'success': True}), 200
+        else:
+            return jsonify({'result': result, 'success': False}), 500
 
     return render_template('index.html')
 
-@app.route('/status/<request_id>', methods=['GET'])
-def check_status(request_id):
-    with request_lock:
-        status = request_status.get(request_id, None)
-    if status:
-        return jsonify(status), 200
-    else:
-        return jsonify({'status': 'unknown'}), 404
-
 if __name__ == '__main__':
-    app.run(debug=False)
+    app.run(debug=True)

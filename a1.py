@@ -1,36 +1,26 @@
-import concurrent.futures
+import threading
 from datetime import datetime
 from bs4 import BeautifulSoup
-from google.oauth2.service_account import Credentials
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseUpload
 import requests
-import io
+from upload import upload_pdf_to_drive, extract_drive_id
 
-#inicijalizacija google drive api vjerodajnica
-scopes = ['https://www.googleapis.com/auth/drive']
-service_account_file = 'api_keys/drive.json'
-parent_folder_id = "1IF4YRCjxJULLJk_lQz_TbMEjwMLrzQXZ"  # Update this with your Google Drive folder ID
-
-creds = Credentials.from_service_account_file(service_account_file, scopes=scopes)
-
-def dohvati_podatke_a1(session, worksheet):
+def dohvati_podatke_a1(session, worksheet, parent_folder_id):
     #dohvati html iz sesije
     data_url = 'https://moj.a1.hr/postpaid/residential/pregled-racuna'
     response = session.get(data_url)
     
     if response.status_code == 302 and "nedostupno" in response.headers.get('Location', ''):
-        return 'A1 site is currently under maintenance. Please try again later.', False
+        return 'A1 stranica trenutno nije dostupna. Molimo pokušajte kasnije.', False
 
     if response.status_code != 200:
-        return 'Failed to fetch data from A1. The site may be undergoing maintenance.', False
+        return 'Neuspješno dohvaćanje podataka s A1. Stranica može biti u održavanju.', False
 
     soup = BeautifulSoup(response.content, 'html.parser')
 
     #dohvati sve elemente koji sadrže vidljive podatke o računima
     svi_racuni = soup.find_all('div', class_='mv-Payment g-12 g-reset g-rwd p')
     if not svi_racuni:
-        return 'No invoices found. The site may be undergoing maintenance or there may be no available invoices.', False
+        return 'Nema pronađenih računa. Stranica može biti u održavanju ili nema dostupnih računa.', False
 
     visible_racuni = [racun for racun in svi_racuni if not is_hidden(racun)]
 
@@ -39,39 +29,45 @@ def dohvati_podatke_a1(session, worksheet):
         header_row = ['Datum', 'Vrsta', 'Iznos računa', 'Datum dospijeća', 'Link na PDF']
         worksheet.append_row(header_row)
 
+    #dohvati datum posljednjeg unosa u radni list
     latest_date_sheet = worksheet.cell(2, 1).value
     if latest_date_sheet:
-        latest_date_sheet = datetime.strptime(latest_date_sheet, "%d.%m.%Y")
+        latest_date_sheet = datetime.strptime(latest_date_sheet, "%m/%Y")
         visible_racuni = [racun for racun in visible_racuni if extract_date(racun) > latest_date_sheet]
 
+    if not visible_racuni:
+        return 'Nema novih računa.', True
+    
     data_to_insert = []
     pdf_links = {}
+    threads = []
 
     def fetch_and_upload(racun):
         datum, vrsta, iznos_racuna, datum_dospijeca, pdf_link = extract_racun_data(racun)
         if datum:
             if pdf_link:
-                pdf_link = upload_pdf_to_drive(session, pdf_link, datum)
-            return [datum, vrsta, iznos_racuna, datum_dospijeca, pdf_link]
-        return None
+                pdf_link = upload_pdf_to_drive(session, pdf_link, datum, parent_folder_id, date_format="%m/%Y")
+            data_to_insert.append([datum, vrsta, iznos_racuna, datum_dospijeca, pdf_link])
 
-    # Asinkrono preuzimanje i upload PDF-ova
-    with concurrent.futures.ThreadPoolExecutor() as executor:
-        future_to_racun = {executor.submit(fetch_and_upload, racun): racun for racun in visible_racuni}
-        for future in concurrent.futures.as_completed(future_to_racun):
-            result = future.result()
-            if result:
-                data_to_insert.append(result)
+    #paralelno preuzimanje i upload PDF-ova
+    for racun in visible_racuni:
+        thread = threading.Thread(target=fetch_and_upload, args=(racun,))
+        threads.append(thread)
+        thread.start()
 
-    # Sortiraj podatke po datumu prije umetanja u google sheets
+    #pričekaj završetak svih niti
+    for thread in threads:
+        thread.join()
+
+    #sortiraj podatke po datumu prije umetanja u google sheets
     data_to_insert.sort(key=lambda x: datetime.strptime(x[0], "%m/%Y"), reverse=True)
 
-    # Umetni sve podatke odjednom
+    #umetni sve podatke odjednom
     if data_to_insert:
         worksheet.insert_rows(data_to_insert, 2, value_input_option='RAW')
-        return 'Data successfully inserted into the worksheet', True
+        return 'Podaci uspješno uneseni u radni list', True
 
-    return 'No new data to insert', True
+    return 'Nema novih podataka za unos', True
 
 def is_hidden(element):
     parent = element.find_parent(attrs={"class": "js-toggle-section hide"})
@@ -121,31 +117,3 @@ def extract_racun_data(racun):
         pdf_link = f"https://moj.a1.hr{pdf_element['href']}"
 
     return datum, vrsta, iznos_racuna, datum_dospijeca, pdf_link
-
-def upload_pdf_to_drive(session, pdf_url, datum):
-    response = session.get(pdf_url)
-    if response.status_code == 200:
-        formatted_date = datetime.strptime(datum, "%m/%Y").strftime("%Y_%m")
-        pdf_filename = f"Racun_{formatted_date}.pdf"
-        content = io.BytesIO(response.content)
-
-        service = build('drive', 'v3', credentials=creds)
-        file_metadata = {
-            'name': pdf_filename,
-            'parents': [parent_folder_id]
-        }
-
-        media_body = MediaIoBaseUpload(content, mimetype='application/pdf', resumable=True)
-
-        try:
-            file = service.files().create(
-                body=file_metadata,
-                media_body=media_body,
-                fields='id, webViewLink'
-            ).execute()
-
-            return file['webViewLink']  #mapiraj izvorni URL na google drive link
-        except Exception as e:
-            return ""  #u slučaju greške, vrati prazan link
-    else:
-        return ""  #u slučaju greške, vrati prazan link
