@@ -72,6 +72,12 @@ def prijava(korisnicko_ime, lozinka, stranica):
         if response.status_code != 302:
             return None
         
+        redirected_url = response.headers.get('Location')
+        if redirected_url:
+            response = session.get(redirected_url)
+            if response.status_code != 200:
+                return None
+        
         return session
 
     elif stranica == 'a1':
@@ -92,10 +98,17 @@ def prijava(korisnicko_ime, lozinka, stranica):
 
         #rukovanje preusmjeravanjem nakon uspješne prijave
         redirected_url = response.headers.get('Location')
-        if redirected_url:
-            session.get(redirected_url)  #prati preusmjeravanje kako bi se uspostavila sesija
+        while redirected_url:
+            response = session.get(redirected_url, allow_redirects=False)
+            if response.status_code == 302:
+                redirected_url = response.headers.get('Location')
+            elif response.status_code == 200:
+                return session
+            else:
+                return None
 
-        return session
+        return None
+
 
 #funkcija za kreiranje radnih listova u Google Sheets
 def create_worksheets(spreadsheet):
@@ -118,14 +131,14 @@ def process_request(korisnicko_ime, lozinka, stranica, sheet_url, drive_url_hep,
         gc = gspread.service_account(filename='api_keys/racuni.json')
         try:
             spreadsheet = gc.open_by_url(sheet_url)
-        except Exception as e:
+        except Exception:
             return f"Greška pri otvaranju Google Sheets", False
                 
         create_worksheets(spreadsheet)
         
         try:
             worksheet = spreadsheet.worksheet(stranica)
-        except Exception as e:
+        except Exception:
             return f"Greška pri otvaranju radnog lista", False
         
         if worksheet is None:
@@ -143,7 +156,7 @@ def process_request(korisnicko_ime, lozinka, stranica, sheet_url, drive_url_hep,
 
         return result, success
 
-    except Exception as e:
+    except Exception:
         return f'Greška pri prikupljanju podataka.', False
 
 @app.route('/', methods=['GET', 'POST'])
