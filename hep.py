@@ -20,7 +20,7 @@ def dohvati_podatke_hep(session, worksheet, kupac_id, parent_folder_id):
         except ValueError as e:
             return f'Neuspješno parsiranje HEP podataka: {str(e)}', False
 
-        #dohvati sve račune
+        #dohvati sve računeS
         svi_racuni = data.get('promet_lista', [])
 
         #ako je radni list prazan, dodaj zaglavlje
