@@ -41,9 +41,9 @@ def extract_vio_invoice_details(text):
         "invoice_period": r"za\s+vodne\s+usluge\s+i\s+naknade\s+od\s+(\d{2}\.\d{2}\.\d{4}\.)\s+do\s+(\d{2}\.\d{2}\.\d{4}\.)",
         "invoice_date": r"U Zagrebu,\s+(\d{2}\.\d{2}\.\d{4})",
         "due_date": r"Dospijeće:\s+(\d{2}\.\d{2}\.\d{4})",
-        "customer_name": r"Naziv kupca:\s+([^\n]+)",  #zaustavi se na novom retku
+        "customer_name": r"Naziv kupca:\s+([^\n]+)",
         "amount_due": r"Iznos računa:\s+([\d,]+) EUR",
-        "iban": r"\bHR\d{19}\b",  #izravno odgovara IBAN-u
+        "iban": r"\bHR\d{19}\b",
     }
 
     details = {}
@@ -54,7 +54,7 @@ def extract_vio_invoice_details(text):
             if key == "invoice_period":
                 details[key] = f"{matches[0][0]} to {matches[0][1]}"
             else:
-                details[key] = matches[0].strip()  #ukloni nepotrebne razmake
+                details[key] = matches[0].strip()
         else:
             details[key] = None
 
@@ -68,7 +68,7 @@ def extract_a1_invoice_details(text):
         "invoice_period": r"za razdoblje:\s+(\d{2}\.\d{2}\.\d{4}\.)\s*-\s*(\d{2}\.\d{2}\.\d{4}\.)",
         "invoice_date": r"Datum izdavanja:\s+(\d{2}\.\d{2}\.\d{4})",
         "due_date": r"Datum dospijeća:\s+(\d{2}\.\d{2}\.\d{4})",
-        "customer_name": r"Platno odgovorna osoba:\s+([^,]+),\s+([^,]+),\s+([^\n]+)",  #odvoji ime i adresu
+        "customer_name": r"Platno odgovorna osoba:\s+([^,]+),\s+([^,]+),\s+([^\n]+)",
         "amount_due": r"ZA PLATITI\s+([\d,]+)",
         "iban": r"\bHR\d{19}\b",
     }
@@ -100,7 +100,7 @@ def extract_hep_invoice_details(text):
         "due_date": r"Datum dospijeća:\s+(\d{2}\.\d{2}\.\d{4})",
         "customer_name": r"Kupac:\s+([^\n]+)",
         "amount_due": r"UKUPAN IZNOS RAČUNA\s+([\d,]+)",
-        "iban": r"\bHR\d{19}\b",  #izravno odgovara IBAN-u
+        "iban": r"\bHR\d{19}\b",
     }
 
     details = {}

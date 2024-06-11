@@ -304,10 +304,10 @@ class TestUploadPDF(unittest.TestCase):
         mock_drive_service.files.return_value = mock_files
         mock_build.return_value = mock_drive_service
 
-        result = upload_pdf_to_drive(mock_session, 'https://example.com/pdf', '01.01.2023', 'parent_folder_id')
+        result = upload_pdf_to_drive(mock_session, 'https://test.com/pdf', '01.01.2024', 'parent_folder_id')
         self.assertIn('fake_link', result)
 
-        result_with_payload = upload_pdf_to_drive(mock_session, 'https://example.com/pdf', '01.01.2023', 'parent_folder_id', payload={'key': 'value'})
+        result_with_payload = upload_pdf_to_drive(mock_session, 'https://test.com/pdf', '01.01.2024', 'parent_folder_id', payload={'key': 'value'})
         self.assertIn('fake_link', result_with_payload)
         
 class TestPDFExtraction(unittest.TestCase):
