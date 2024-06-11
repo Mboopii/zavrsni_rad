@@ -139,16 +139,15 @@ def upload_invoice():
 
         #ekstrakcija teksta iz PDF datoteke
         pdf_text = extract_text_from_pdf(file_path)
-        print(pdf_text)  #za debugiranje: ispiši ekstraktirani tekst
         invoice_type = request.form.get('invoice_type')
+        
         #provjeri je li tip računa naveden
         if not invoice_type:
             return jsonify({"error": "Invoice type not provided"}), 400
+        
         #ekstrakcija detalja iz računa
         invoice_details = extract_invoice_details(pdf_text, invoice_type)
         
-        print("Invoice Details:\n", invoice_details)  #za debugiranje: ispiši izdvojene detalje
-
         #ukloni PDF datoteku nakon obrade
         if os.path.exists(file_path):
             os.remove(file_path)

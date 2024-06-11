@@ -75,7 +75,7 @@ async function submitPdfForm(event) {
     document.querySelector('.loader-background').style.display = 'block';
 
     try {
-        const response = await fetch('http://127.0.0.1:5000/pdf/upload-invoice', {
+        const response = await fetch('https://web-scraping-8s0w.onrender.com/', {
             method: 'POST',
             body: formData,
         });
